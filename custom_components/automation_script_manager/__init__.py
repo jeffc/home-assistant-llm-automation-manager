@@ -4,6 +4,8 @@ import logging
 import os
 import uuid
 import asyncio
+import json
+import ast
 from typing import Any
 
 import voluptuous as vol
@@ -14,9 +16,8 @@ from homeassistant.core import (
     ServiceCall,
     ServiceResponse,
     SupportsResponse,
-    CONF_ID,
-    SERVICE_RELOAD,
 )
+from homeassistant.const import CONF_ID, SERVICE_RELOAD
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import label_registry as lr
@@ -62,6 +63,7 @@ CREATE_AUTOMATION_SCHEMA = vol.Schema(
         vol.Optional("on_completion", default="persist"): vol.In(
             ["delete_self", "disable_self", "persist"]
         ),
+        vol.Optional("expose_to_ai", default=False): cv.boolean,
     }
 )
 
@@ -84,6 +86,7 @@ CREATE_SCRIPT_SCHEMA = vol.Schema(
         vol.Optional("on_completion", default="persist"): vol.In(
             ["delete_self", "persist"]
         ),
+        vol.Optional("expose_to_ai", default=False): cv.boolean,
     }
 )
 
@@ -93,6 +96,30 @@ DELETE_SCRIPT_SCHEMA = vol.Schema(
         vol.Optional("entity_id"): cv.entity_id,
     }
 )
+
+def _parse_json_fallback(value: Any) -> Any:
+    """Parse JSON/Python string if the value is wrapped in a dict with 'json' key or is a string itself."""
+    if isinstance(value, dict) and "json" in value:
+        val_json = value["json"]
+        if isinstance(val_json, str):
+            try:
+                return json.loads(val_json)
+            except Exception:
+                try:
+                    return ast.literal_eval(val_json)
+                except Exception:
+                    pass
+    elif isinstance(value, str):
+        trimmed = value.strip()
+        if (trimmed.startswith("[") and trimmed.endswith("]")) or (trimmed.startswith("{") and trimmed.endswith("}")):
+            try:
+                return json.loads(trimmed)
+            except Exception:
+                try:
+                    return ast.literal_eval(trimmed)
+                except Exception:
+                    pass
+    return value
 
 def _read_yaml(path: str) -> Any:
     """Read YAML helper."""
@@ -105,30 +132,10 @@ def _write_yaml(path: str, data: Any) -> None:
     contents = dump(data)
     write_utf8_file_atomic(path, contents)
 
-async def _async_assign_tag(
-    hass: HomeAssistant, domain: str, config_key: str, tag: str
+async def _async_post_create_processing(
+    hass: HomeAssistant, domain: str, config_key: str, tag: str, expose_to_ai: bool
 ) -> None:
-    """Assign a tag to the newly created entity in the registry."""
-    if not tag:
-        return
-
-    label_reg = lr.async_get(hass)
-    label = label_reg.async_get_label_by_name(tag)
-    if label is None:
-        try:
-            label = label_reg.async_create(tag)
-        except ValueError:
-            # Fallback if label is already in use by name (concurrency)
-            label = next(
-                (l for l in label_reg.labels.values() if l.name.lower() == tag.lower()),
-                None,
-            )
-            if label is None:
-                _LOGGER.error("Failed to find or create label '%s'", tag)
-                return
-
-    label_id = label.label_id
-
+    """Assign tag and expose entity to AI helper."""
     ent_reg = er.async_get(hass)
     entity_id = ent_reg.async_get_entity_id(domain, domain, config_key)
 
@@ -141,17 +148,41 @@ async def _async_assign_tag(
 
     if not entity_id:
         _LOGGER.warning(
-            "Could not find registered entity for %s.%s to assign tag",
+            "Could not find registered entity for %s.%s to assign tag/expose",
             domain,
             config_key,
         )
         return
 
-    reg_entry = ent_reg.async_get(entity_id)
-    if reg_entry:
-        new_labels = reg_entry.labels | {label_id}
-        ent_reg.async_update_entity(entity_id, labels=new_labels)
-        _LOGGER.info("Assigned tag '%s' to entity '%s'", tag, entity_id)
+    # Assign tag if configured and tag is non-empty
+    if tag:
+        label_reg = lr.async_get(hass)
+        label = label_reg.async_get_label_by_name(tag)
+        if label is None:
+            try:
+                label = label_reg.async_create(tag)
+            except ValueError:
+                # Fallback if label is already in use by name (concurrency)
+                label = next(
+                    (l for l in label_reg.labels.values() if l.name.lower() == tag.lower()),
+                    None,
+                )
+        if label:
+            label_id = label.label_id
+            reg_entry = ent_reg.async_get(entity_id)
+            if reg_entry:
+                new_labels = reg_entry.labels | {label_id}
+                ent_reg.async_update_entity(entity_id, labels=new_labels)
+                _LOGGER.info("Assigned tag '%s' to entity '%s'", tag, entity_id)
+
+    # Expose to voice assistant/AI if requested
+    if expose_to_ai:
+        try:
+            from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+            async_expose_entity(hass, "conversation", entity_id, True)
+            _LOGGER.info("Exposed entity '%s' to AI (conversation)", entity_id)
+        except Exception as err:
+            _LOGGER.error("Failed to expose entity '%s' to AI: %s", entity_id, err)
 
 def _verify_deletion_restriction(
     hass: HomeAssistant, domain: str, config_key: str
@@ -211,7 +242,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             config_data = {}
 
             if "config" in call.data:
-                config_data.update(call.data["config"])
+                parsed_config = _parse_json_fallback(call.data["config"])
+                if isinstance(parsed_config, dict):
+                    config_data.update(parsed_config)
 
             # Override or set individual fields if provided
             for key in (
@@ -226,7 +259,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "mode",
             ):
                 if key in call.data:
-                    config_data[key] = call.data[key]
+                    config_data[key] = _parse_json_fallback(call.data[key])
 
             # Resolve config key from entity_id if id is not specified
             if not config_key:
@@ -327,10 +360,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
             _LOGGER.info("Successfully created/updated automation '%s'", config_key)
 
-            # Assign tag if configured
+            # Assign tag and expose if configured
             tag = entry.options.get("tag", "").strip()
-            if tag:
-                await _async_assign_tag(hass, AUTOMATION_DOMAIN, config_key, tag)
+            expose_to_ai = call.data.get("expose_to_ai", False)
+            await _async_post_create_processing(
+                hass, AUTOMATION_DOMAIN, config_key, tag, expose_to_ai
+            )
 
             return {"success": True, "id": config_key}
 
@@ -426,12 +461,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             config_data = {}
             if "config" in call.data:
-                config_data.update(call.data["config"])
+                parsed_config = _parse_json_fallback(call.data["config"])
+                if isinstance(parsed_config, dict):
+                    config_data.update(parsed_config)
 
             # Override or set individual fields if provided
             for key in ("alias", "description", "sequence", "mode"):
                 if key in call.data:
-                    config_data[key] = call.data[key]
+                    config_data[key] = _parse_json_fallback(call.data[key])
 
             # Append completion action if specified
             if on_completion != "persist":
@@ -472,10 +509,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await hass.services.async_call(SCRIPT_DOMAIN, SERVICE_RELOAD, blocking=True)
             _LOGGER.info("Successfully created/updated script '%s'", config_key)
 
-            # Assign tag if configured
+            # Assign tag and expose if configured
             tag = entry.options.get("tag", "").strip()
-            if tag:
-                await _async_assign_tag(hass, SCRIPT_DOMAIN, config_key, tag)
+            expose_to_ai = call.data.get("expose_to_ai", False)
+            await _async_post_create_processing(
+                hass, SCRIPT_DOMAIN, config_key, tag, expose_to_ai
+            )
 
             return {"success": True, "id": config_key}
 

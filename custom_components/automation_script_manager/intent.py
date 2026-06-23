@@ -17,6 +17,16 @@ class CreateAutomationIntent(intent.IntentHandler):
         "conditional, or scheduled behavior (e.g. if the user says 'whenever X, do Y', 'when X occurs, do Y', "
         "or 'schedule action Z at time T'). For immediate, on-demand action execution, prefer creating or "
         "running scripts instead.\n"
+        "ONE-TIME VS EVERY-TIME GUIDELINE: In your response to the user, you must be clear about whether the "
+        "automation is a one-time action or runs every time. If the user says 'when' or 'next time', assume "
+        "a one-time automation (and use 'on_completion': 'delete_self' or 'disable_self') unless they explicitly "
+        "say otherwise. If the user says 'every time' or 'whenever', that is a cue to make a persistent automation "
+        "that runs every time (with 'on_completion': 'persist').\n"
+        "REQUIRED FIELDS GUIDELINE: When calling this tool to create or update an automation, you MUST always "
+        "include the trigger(s), any relevant condition(s), AND the action(s) in the tool call. An automation is "
+        "invalid and will fail validation if it doesn't contain at least one action. You must translate the user's "
+        "requested action outcome (e.g. 'ping my phone', 'notify me', 'turn on light') into concrete, valid Home Assistant "
+        "service action calls and populate the 'action' field.\n"
         "SELF-DESTRUCTING / SCHEDULED ACTIONS HINT: You can create a 'self-destructing' automation by "
         "setting 'on_completion' to 'delete_self' or 'disable_self'. This is highly useful for performing "
         "a delayed action in the future (e.g. triggering at a specific time or after a delay) or when a "
@@ -77,6 +87,9 @@ class CreateAutomationIntent(intent.IntentHandler):
         ):
             if key in slots:
                 service_data[key] = slots[key]["value"]
+
+        # Force exposing the created automation to the AI
+        service_data["expose_to_ai"] = True
 
         result = await hass.services.async_call(
             DOMAIN,
@@ -184,6 +197,9 @@ class CreateScriptIntent(intent.IntentHandler):
         ):
             if key in slots:
                 service_data[key] = slots[key]["value"]
+
+        # Force exposing the created script to the AI
+        service_data["expose_to_ai"] = True
 
         result = await hass.services.async_call(
             DOMAIN,

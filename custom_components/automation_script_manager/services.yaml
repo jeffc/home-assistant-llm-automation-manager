@@ -81,6 +81,12 @@ create_automation:
               value: disable_self
             - label: Persist (Normal automation)
               value: persist
+    expose_to_ai:
+      name: Expose to AI
+      description: Expose the newly created automation to the AI/conversation assistant.
+      default: false
+      selector:
+        boolean:
 
 delete_automation:
   name: Delete Automation
@@ -167,6 +173,12 @@ create_script:
               value: delete_self
             - label: Persist (Normal script)
               value: persist
+    expose_to_ai:
+      name: Expose to AI
+      description: Expose the newly created script to the AI/conversation assistant.
+      default: false
+      selector:
+        boolean:
 
 delete_script:
   name: Delete Script
