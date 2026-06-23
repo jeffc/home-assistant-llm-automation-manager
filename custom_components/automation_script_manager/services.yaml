@@ -1,0 +1,187 @@
+create_automation:
+  name: Create or Update Automation
+  description: Creates a new automation or updates an existing one in automations.yaml.
+  fields:
+    id:
+      name: Automation ID
+      description: The unique ID of the automation. If not provided, a random UUID will be generated unless entity_id is specified.
+      example: my_custom_automation_1
+      selector:
+        text:
+    entity_id:
+      name: Entity ID
+      description: The automation entity ID (e.g. automation.my_automation). If specified, it resolves to its internal config ID.
+      example: automation.my_automation
+      selector:
+        entity:
+          domain: automation
+    config:
+      name: Configuration Dictionary
+      description: A key-value dictionary of the automation settings (alias, trigger, condition, action, mode).
+      example:
+        alias: Turn on light on motion
+        trigger:
+          - platform: state
+            entity_id: binary_sensor.motion
+            to: "on"
+        action:
+          - service: light.turn_on
+            target:
+              entity_id: light.living_room
+      selector:
+        object:
+    alias:
+      name: Alias
+      description: Friendly name of the automation. Will override any alias inside the config dict.
+      example: Living Room Light Motion
+      selector:
+        text:
+    description:
+      name: Description
+      description: Description of the automation. Will override any description inside the config dict.
+      selector:
+        text:
+    trigger:
+      name: Trigger
+      description: Trigger configuration. Will override any trigger/triggers inside the config dict.
+      selector:
+        object:
+    condition:
+      name: Condition
+      description: Condition configuration. Will override any condition/conditions inside the config dict.
+      selector:
+        object:
+    action:
+      name: Action
+      description: Action configuration. Will override any action/actions inside the config dict.
+      selector:
+        object:
+    mode:
+      name: Mode
+      description: Execution mode of the automation. Will override any mode inside the config dict.
+      example: single
+      selector:
+        select:
+          options:
+            - single
+            - restart
+            - queued
+            - parallel
+    on_completion:
+      name: On Completion Action
+      description: Action to perform automatically after the automation runs. Appends the appropriate action call.
+      example: delete_self
+      default: persist
+      selector:
+        select:
+          options:
+            - label: Delete Self (One-time run)
+              value: delete_self
+            - label: Disable Self (Run once until re-enabled)
+              value: disable_self
+            - label: Persist (Normal automation)
+              value: persist
+
+delete_automation:
+  name: Delete Automation
+  description: Deletes an automation from automations.yaml and unloads it.
+  fields:
+    id:
+      name: Automation ID
+      description: The unique ID of the automation to delete. One of 'id' or 'entity_id' is required.
+      example: my_custom_automation_1
+      selector:
+        text:
+    entity_id:
+      name: Entity ID
+      description: The automation entity ID (e.g. automation.my_automation). One of 'id' or 'entity_id' is required.
+      example: automation.my_automation
+      selector:
+        entity:
+          domain: automation
+
+create_script:
+  name: Create or Update Script
+  description: Creates a new script or updates an existing one in scripts.yaml.
+  fields:
+    id:
+      name: Script ID (Slug)
+      description: The unique slug for the script (lowercase letters, numbers, and underscores). One of 'id' or 'entity_id' is required.
+      example: my_custom_script_1
+      selector:
+        text:
+    entity_id:
+      name: Entity ID
+      description: The script entity ID (e.g. script.my_script). One of 'id' or 'entity_id' is required.
+      example: script.my_script
+      selector:
+        entity:
+          domain: script
+    config:
+      name: Configuration Dictionary
+      description: A key-value dictionary of the script settings (alias, sequence, mode).
+      example:
+        alias: Flash living room light
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: light.living_room
+      selector:
+        object:
+    alias:
+      name: Alias
+      description: Friendly name of the script. Will override any alias inside the config dict.
+      example: Flash living room light
+      selector:
+        text:
+    description:
+      name: Description
+      description: Description of the script. Will override any description inside the config dict.
+      selector:
+        text:
+    sequence:
+      name: Sequence
+      description: The sequence of steps for the script. Will override any sequence inside the config dict.
+      selector:
+        object:
+    mode:
+      name: Mode
+      description: Execution mode of the script. Will override any mode inside the config dict.
+      example: single
+      selector:
+        select:
+          options:
+            - single
+            - restart
+            - queued
+            - parallel
+    on_completion:
+      name: On Completion Action
+      description: Action to perform automatically after the script runs. Appends the appropriate action call.
+      example: delete_self
+      default: persist
+      selector:
+        select:
+          options:
+            - label: Delete Self (One-time run)
+              value: delete_self
+            - label: Persist (Normal script)
+              value: persist
+
+delete_script:
+  name: Delete Script
+  description: Deletes a script from scripts.yaml and unloads it.
+  fields:
+    id:
+      name: Script ID
+      description: The unique ID (slug) of the script to delete. One of 'id' or 'entity_id' is required.
+      example: my_custom_script_1
+      selector:
+        text:
+    entity_id:
+      name: Entity ID
+      description: The script entity ID (e.g. script.my_script). One of 'id' or 'entity_id' is required.
+      example: script.my_script
+      selector:
+        entity:
+          domain: script

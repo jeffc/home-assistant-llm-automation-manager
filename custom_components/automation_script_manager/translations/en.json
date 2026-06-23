@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Automation & Script Manager",
+        "description": "Do you want to set up the Automation & Script Manager custom integration?"
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance of this integration is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Options",
+        "description": "Configure the global settings for Automation & Script Manager.",
+        "data": {
+          "tag": "Entity Tag (Label)",
+          "restrict_deletion": "Restrict deletion to tagged entities only",
+          "expose_llm_tools": "Expose AI LLM Tools"
+        },
+        "data_description": {
+          "tag": "The tag (label name) to assign automatically to all created automations/scripts. If the label doesn't exist, it will be registered in Home Assistant.",
+          "restrict_deletion": "If enabled, delete actions will fail for any automation or script that does not have the specified tag.",
+          "expose_llm_tools": "Expose the creation and deletion actions as tools to conversation LLM agents."
+        }
+      }
+    }
+  }
+}

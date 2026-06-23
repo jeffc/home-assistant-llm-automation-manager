@@ -1,0 +1,6 @@
+/core/
+/config/
+/venv/
+__pycache__
+*.pyc
+*.sw*
