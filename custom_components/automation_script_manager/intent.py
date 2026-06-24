@@ -11,47 +11,69 @@ class CreateAutomationIntent(intent.IntentHandler):
     """Handle CreateAutomation intent."""
 
     intent_type = "CreateAutomation"
-    description = (
-        "Create or update an automation in Home Assistant. Exposes triggers, conditions, and actions. "
-        "DECISION GUIDELINE: Creating an automation is appropriate when the user wants event-driven, "
-        "conditional, or scheduled behavior (e.g. if the user says 'whenever X, do Y', 'when X occurs, do Y', "
-        "or 'schedule action Z at time T'). For immediate, on-demand action execution, prefer creating or "
-        "running scripts instead.\n"
-        "ONE-TIME VS EVERY-TIME GUIDELINE: In your response to the user, you must be clear about whether the "
-        "automation is a one-time action or runs every time. If the user says 'when' or 'next time', assume "
-        "a one-time automation (and use 'on_completion': 'delete_self' or 'disable_self') unless they explicitly "
-        "say otherwise. If the user says 'every time' or 'whenever', that is a cue to make a persistent automation "
-        "that runs every time (with 'on_completion': 'persist').\n"
-        "REQUIRED FIELDS GUIDELINE: When calling this tool to create or update an automation, you MUST always "
-        "include the trigger(s), any relevant condition(s), AND the action(s) in the tool call. An automation is "
-        "invalid and will fail validation if it doesn't contain at least one action. You must translate the user's "
-        "requested action outcome (e.g. 'ping my phone', 'notify me', 'turn on light') into concrete, valid Home Assistant "
-        "service action calls and populate the 'action' field.\n"
-        "SELF-DESTRUCTING / SCHEDULED ACTIONS HINT: You can create a 'self-destructing' automation by "
-        "setting 'on_completion' to 'delete_self' or 'disable_self'. This is highly useful for performing "
-        "a delayed action in the future (e.g. triggering at a specific time or after a delay) or when a "
-        "condition is met (e.g. when a sensor reaches a value). Because it is saved as a standard automation entity, "
-        "the scheduled action can later be cancelled by you or the user by disabling or deleting that "
-        "automation before it triggers.\n"
-        "IMPORTANT: Triggers, conditions, and actions must be valid Home Assistant structures. "
-        "EXAMPLES OF VALID TRIGGERS:\n"
-        "- State trigger: [{'platform': 'state', 'entity_id': 'binary_sensor.motion', 'to': 'on'}]\n"
-        "- Time trigger: [{'platform': 'time', 'at': '07:30:00'}]\n"
-        "- Numeric state: [{'platform': 'numeric_state', 'entity_id': 'sensor.battery', 'below': 20}]\n"
-        "- Sun event: [{'platform': 'sun', 'event': 'sunset', 'offset': '+00:30:00'}]\n"
-        "- Zone trigger: [{'platform': 'zone', 'entity_id': 'person.john', 'zone': 'zone.home', 'event': 'enter'}]\n"
-        "EXAMPLES OF VALID CONDITIONS:\n"
-        "- State condition: [{'condition': 'state', 'entity_id': 'sun.sun', 'state': 'below_horizon'}]\n"
-        "- Time condition: [{'condition': 'time', 'after': '22:00:00', 'before': '06:00:00'}]\n"
-        "- Template condition: [{'condition': 'template', 'value_template': '{{ states(\"sensor.battery\") | int > 50 }}'}]\n"
-        "- And condition: [{'condition': 'and', 'conditions': [{'condition': 'state', 'entity_id': 'sun.sun', 'state': 'below_horizon'}, {'condition': 'state', 'entity_id': 'binary_sensor.motion', 'state': 'off'}]}]\n"
-        "EXAMPLES OF VALID ACTIONS:\n"
-        "- Turn on entity: [{'action': 'light.turn_on', 'target': {'entity_id': 'light.living_room'}, 'data': {'brightness_pct': 80}}]\n"
-        "- Turn off entity: [{'action': 'homeassistant.turn_off', 'target': {'entity_id': 'switch.heater'}}]\n"
-        "- Call notification: [{'action': 'persistent_notification.create', 'data': {'title': 'Alert', 'message': 'Intrusion!'}}]\n"
-        "- Delay sequence: [{'delay': '00:01:00'}] (delay for 1 minute)\n"
-        "- Conditional Action (If-Then): [{'if': [{'condition': 'state', 'entity_id': 'sun.sun', 'state': 'below_horizon'}], 'then': [{'action': 'light.turn_on', 'target': {'entity_id': 'light.hallway'}}]}]\n"
-    )
+    description = """Create or update an automation in Home Assistant. Exposes triggers, conditions,
+and actions.
+
+DECISION GUIDELINE: Creating an automation is appropriate when the user wants
+event-driven, conditional, or scheduled behavior (e.g. if the user says 'whenever X, do Y',
+'when X occurs, do Y', or 'schedule action Z at time T'). For immediate, on-demand
+action execution, prefer creating or running scripts instead.
+
+ONE-TIME VS EVERY-TIME GUIDELINE: In your response to the user, you must be clear
+about whether the automation is a one-time action or runs every time. If the user
+says 'when' or 'next time', assume a one-time automation (and use 'on_completion':
+'delete_self' or 'disable_self') unless they explicitly say otherwise. If the user
+says 'every time' or 'whenever', that is a cue to make a persistent automation that
+runs every time (with 'on_completion': 'persist').
+
+REQUIRED FIELDS GUIDELINE: When calling this tool to create or update an automation,
+you MUST always include the trigger(s), any relevant condition(s), AND the action(s)
+in the tool call. An automation is invalid and will fail validation if it doesn't
+contain at least one action. You must translate the user's requested action outcome
+(e.g. 'ping my phone', 'notify me', 'turn on light') into concrete, valid Home Assistant
+service action calls and populate the 'action' field. When creating a notification
+action, ALWAYS use the `notify.send_message` action (never `notify.notify` or service
+names like `notify.jeff`) unless explicitly requested by the user, and target the
+correct notify entity ID from the entity registry/list (e.g. targeting
+`notify.mobile_app_jeff` or `notify.jeff`).
+
+SELF-DESTRUCTING / SCHEDULED ACTIONS HINT: You can create a 'self-destructing'
+automation by setting 'on_completion' to 'delete_self' or 'disable_self'. This is
+highly useful for performing a delayed action in the future (e.g. triggering at a
+specific time or after a delay) or when a condition is met (e.g. when a sensor
+reaches a value). Because it is saved as a standard automation entity, the scheduled
+action can later be cancelled by you or the user by disabling or deleting that
+automation before it triggers.
+
+IMPORTANT: Triggers, conditions, and actions must be valid Home Assistant structures.
+
+EXAMPLES OF VALID TRIGGERS:
+- State trigger: [{'platform': 'state', 'entity_id': 'binary_sensor.motion', 'to': 'on'}]
+- Time trigger: [{'platform': 'time', 'at': '07:30:00'}]
+- Numeric state: [{'platform': 'numeric_state', 'entity_id': 'sensor.battery', 'below': 20}]
+- Sun event: [{'platform': 'sun', 'event': 'sunset', 'offset': '+00:30:00'}]
+- Zone trigger: [{'platform': 'zone', 'entity_id': 'person.john', 'zone': 'zone.home',
+  'event': 'enter'}]
+
+EXAMPLES OF VALID CONDITIONS:
+- State condition: [{'condition': 'state', 'entity_id': 'sun.sun', 'state': 'below_horizon'}]
+- Time condition: [{'condition': 'time', 'after': '22:00:00', 'before': '06:00:00'}]
+- Template condition: [{'condition': 'template',
+  'value_template': '{{ states("sensor.battery") | int > 50 }}'}]
+- And condition: [{'condition': 'and', 'conditions': [{'condition': 'state',
+  'entity_id': 'sun.sun', 'state': 'below_horizon'}, {'condition': 'state',
+  'entity_id': 'binary_sensor.motion', 'state': 'off'}]}]
+
+EXAMPLES OF VALID ACTIONS:
+- Turn on entity: [{'action': 'light.turn_on', 'target': {'entity_id': 'light.living_room'},
+  'data': {'brightness_pct': 80}}]
+- Turn off entity: [{'action': 'homeassistant.turn_off', 'target': {'entity_id': 'switch.heater'}}]
+- Send notification: [{'action': 'notify.send_message', 'target': {'entity_id': 'notify.jeff'},
+  'data': {'message': 'Intrusion!', 'title': 'Alert'}}]
+- Delay sequence: [{'delay': '00:01:00'}] (delay for 1 minute)
+- Conditional Action (If-Then): [{'if': [{'condition': 'state', 'entity_id': 'sun.sun',
+  'state': 'below_horizon'}], 'then': [{'action': 'light.turn_on',
+  'target': {'entity_id': 'light.hallway'}}]}]"""
 
     @property
     def slot_schema(self) -> dict | None:
@@ -155,17 +177,31 @@ class CreateScriptIntent(intent.IntentHandler):
     """Handle CreateScript intent."""
 
     intent_type = "CreateScript"
-    description = (
-        "Create or update a script in Home Assistant. Scripts define a sequence of actions. "
-        "IMPORTANT: The sequence must be a valid Home Assistant sequence structure. "
-        "EXAMPLES OF VALID ACTIONS IN SEQUENCE:\n"
-        "- Call service: [{'action': 'light.turn_on', 'target': {'entity_id': 'light.living_room'}, 'data': {'brightness_pct': 50}}]\n"
-        "- Media Player: [{'action': 'media_player.volume_set', 'target': {'entity_id': 'media_player.lounge'}, 'data': {'volume_level': 0.5}}]\n"
-        "- Run script: [{'action': 'script.flash_light'}]\n"
-        "- Delay: [{'delay': '00:00:05'}] (delay for 5 seconds)\n"
-        "- Conditional sequence (If-Then): [{'if': [{'condition': 'state', 'entity_id': 'sun.sun', 'state': 'below_horizon'}], 'then': [{'action': 'light.turn_on', 'target': {'entity_id': 'light.hallway'}}]}]\n"
-        "- Choose logic: [{'choose': [{'conditions': [{'condition': 'state', 'entity_id': 'binary_sensor.motion', 'state': 'on'}], 'sequence': [{'action': 'light.turn_on', 'target': {'entity_id': 'light.living_room'}}]}]}]\n"
-    )
+    description = """Create or update a script in Home Assistant. Scripts define a sequence
+of actions.
+
+IMPORTANT: The sequence must be a valid Home Assistant sequence structure.
+
+NOTIFICATION GUIDELINE: When creating a notification action in your sequence, ALWAYS
+use the `notify.send_message` action (never `notify.notify` or service names like
+`notify.jeff`), and target the correct notify entity ID from the entity registry/list
+(e.g. targeting `notify.mobile_app_jeff` or `notify.jeff`).
+
+EXAMPLES OF VALID ACTIONS IN SEQUENCE:
+- Call service: [{'action': 'light.turn_on', 'target': {'entity_id': 'light.living_room'},
+  'data': {'brightness_pct': 50}}]
+- Send notification: [{'action': 'notify.send_message', 'target': {'entity_id': 'notify.jeff'},
+  'data': {'message': 'Alert!'}}]
+- Media Player: [{'action': 'media_player.volume_set',
+  'target': {'entity_id': 'media_player.lounge'}, 'data': {'volume_level': 0.5}}]
+- Run script: [{'action': 'script.flash_light'}]
+- Delay: [{'delay': '00:00:05'}] (delay for 5 seconds)
+- Conditional sequence (If-Then): [{'if': [{'condition': 'state', 'entity_id': 'sun.sun',
+  'state': 'below_horizon'}], 'then': [{'action': 'light.turn_on',
+  'target': {'entity_id': 'light.hallway'}}]}]
+- Choose logic: [{'choose': [{'conditions': [{'condition': 'state',
+  'entity_id': 'binary_sensor.motion', 'state': 'on'}], 'sequence': [{'action': 'light.turn_on',
+  'target': {'entity_id': 'light.living_room'}}]}]}]"""
 
     @property
     def slot_schema(self) -> dict | None:
@@ -261,9 +297,47 @@ class DeleteScriptIntent(intent.IntentHandler):
         return response
 
 
+class GetExposedNotifyEntitiesIntent(intent.IntentHandler):
+    """Handle GetExposedNotifyEntities intent."""
+
+    intent_type = "GetExposedNotifyEntities"
+    description = "Get the list of notify entities that are exposed to the AI/conversation assistant."
+
+    async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
+        """Handle the intent."""
+        hass = intent_obj.hass
+
+        try:
+            from homeassistant.components.homeassistant.exposed_entities import async_should_expose
+            has_expose_helper = True
+        except ImportError:
+            has_expose_helper = False
+
+        exposed_entities = []
+
+        if has_expose_helper:
+            for state in hass.states.async_all("notify"):
+                entity_id = state.entity_id
+                if async_should_expose(hass, "conversation", entity_id):
+                    exposed_entities.append(f"- {entity_id} ({state.name})")
+
+        response = intent_obj.create_response()
+
+        if exposed_entities:
+            entities_str = "\n".join(exposed_entities)
+            response.async_set_speech(
+                f"The following notify entities are exposed to AI/Assist:\n{entities_str}"
+            )
+        else:
+            response.async_set_speech("No notify entities are currently exposed to the AI/conversation assistant.")
+
+        return response
+
+
 async def async_setup_intents(hass: HomeAssistant) -> None:
     """Register intents with the Home Assistant intent system."""
     intent.async_register(hass, CreateAutomationIntent())
     intent.async_register(hass, DeleteAutomationIntent())
     intent.async_register(hass, CreateScriptIntent())
     intent.async_register(hass, DeleteScriptIntent())
+    intent.async_register(hass, GetExposedNotifyEntitiesIntent())
