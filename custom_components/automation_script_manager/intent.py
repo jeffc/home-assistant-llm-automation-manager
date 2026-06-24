@@ -334,6 +334,108 @@ class GetExposedNotifyEntitiesIntent(intent.IntentHandler):
         return response
 
 
+class EnumerateActionsIntent(intent.IntentHandler):
+    """Handle EnumerateActions intent."""
+
+    intent_type = "EnumerateActions"
+    description = (
+        "List all available actions (services) registered in Home "
+        "Assistant with a short description."
+    )
+
+    async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
+        """Handle the intent."""
+        hass = intent_obj.hass
+
+        from homeassistant.helpers.service import async_get_all_descriptions
+        descriptions = await async_get_all_descriptions(hass)
+
+        lines = []
+        for domain, services in sorted(descriptions.items()):
+            for service_name, service_info in sorted(services.items()):
+                desc = service_info.get("description", "No description available.")
+                lines.append(f"- {domain}.{service_name}: {desc}")
+
+        response = intent_obj.create_response()
+        if lines:
+            actions_list = "\n".join(lines)
+            response.async_set_speech(
+                f"Here are all available actions:\n{actions_list}"
+            )
+        else:
+            response.async_set_speech("No actions found.")
+
+        return response
+
+
+class GetActionDetailsIntent(intent.IntentHandler):
+    """Handle GetActionDetails intent."""
+
+    intent_type = "GetActionDetails"
+    description = "Get detailed information about an action (service) and its arguments."
+
+    @property
+    def slot_schema(self) -> dict | None:
+        """Return slot schema."""
+        return {
+            vol.Required("action_name"): cv.string,
+        }
+
+    async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
+        """Handle the intent."""
+        hass = intent_obj.hass
+        slots = intent_obj.slots
+
+        action_name = slots["action_name"]["value"].strip()
+
+        if "." not in action_name:
+            response = intent_obj.create_response()
+            response.async_set_speech(
+                f"Invalid action name '{action_name}'. Please specify it in the format "
+                "'domain.action' (e.g. 'light.turn_on')."
+            )
+            return response
+
+        domain, service = action_name.split(".", 1)
+
+        from homeassistant.helpers.service import async_get_all_descriptions
+        descriptions = await async_get_all_descriptions(hass)
+
+        response = intent_obj.create_response()
+
+        domain_services = descriptions.get(domain)
+        if not domain_services or service not in domain_services:
+            response.async_set_speech(
+                f"Action '{action_name}' was not found."
+            )
+            return response
+
+        service_info = domain_services[service]
+        desc = service_info.get("description", "No description available.")
+
+        speech_parts = [
+            f"Action: {action_name}",
+            f"Description: {desc}",
+        ]
+
+        fields = service_info.get("fields", {})
+        if fields:
+            speech_parts.append("Arguments:")
+            for field_name, field_info in fields.items():
+                field_desc = field_info.get("description", "No description available.")
+                field_required = "Required" if field_info.get("required") else "Optional"
+                field_example = field_info.get("example")
+                example_str = f" (Example: {field_example})" if field_example is not None else ""
+                speech_parts.append(
+                    f"- {field_name} ({field_required}): {field_desc}{example_str}"
+                )
+        else:
+            speech_parts.append("This action takes no arguments.")
+
+        response.async_set_speech("\n".join(speech_parts))
+        return response
+
+
 async def async_setup_intents(hass: HomeAssistant) -> None:
     """Register intents with the Home Assistant intent system."""
     intent.async_register(hass, CreateAutomationIntent())
@@ -341,3 +443,5 @@ async def async_setup_intents(hass: HomeAssistant) -> None:
     intent.async_register(hass, CreateScriptIntent())
     intent.async_register(hass, DeleteScriptIntent())
     intent.async_register(hass, GetExposedNotifyEntitiesIntent())
+    intent.async_register(hass, EnumerateActionsIntent())
+    intent.async_register(hass, GetActionDetailsIntent())
