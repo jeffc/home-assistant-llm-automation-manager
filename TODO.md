@@ -1,11 +1,13 @@
 # Todo List
 
-- [ ] **Configurability for `EnumerateActions`**
+- [ ] **Configurability & Hard Enforcement of Allowed Actions**
   - Add an options flow setting `expose_actions_mode` ("expose_all_except" or "expose_only_these").
   - Add a multi-select option `exposed_actions_list` in the options flow using a `SelectSelector` populated with:
     - Domains (prefixed with `domain:`, e.g., `domain:light`)
     - Individual actions (prefixed with `action:`, e.g., `action:light.turn_on`)
   - Update `EnumerateActions` intent handler to filter actions based on these choices.
+  - Update the validation engine to reject creating or updating automations/scripts that reference any action not allowed under these rules.
+
 
 - [ ] **LLM Generation Debug Mode**
   - Add a boolean setting `debug_mode` to the options flow.
@@ -37,3 +39,7 @@
   - Update the description of `CreateAutomationIntent` in `intent.py` to instruct the LLM:
     - When creating a temporary/one-shot automation with a condition (e.g., "do X when Y if Z"), it should place the condition inside a conditional action block (`if`-`then` inside the action list) instead of using a top-level `condition`.
     - This ensures the automation triggers and always executes the self-destruct/disable completion action regardless of whether the condition is true or false.
+
+- [ ] **Managed Entity Diagnostics (`GetManagedEntityErrors`)**
+  - Implement an intent handler to retrieve recent runtime errors or execution traces for entities carrying the `AI Generated` label.
+  - Helps LLM agents diagnose post-creation runtime failures.
