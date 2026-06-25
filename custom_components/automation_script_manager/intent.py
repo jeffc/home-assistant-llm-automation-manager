@@ -50,7 +50,9 @@ automation will be created.
 
 DRY-RUN VALIDATION GUIDELINE: You can test if your parameters are valid (including syntax,
 verifying that all entity IDs exist, and verifying that all actions exist) without saving
-by setting 'validate_only' to True.
+by setting 'validate_only' to True. You are strongly encouraged to use validation mode
+first, and only call the actual creation/update operation (setting 'validate_only' to False or
+omitting it) once it successfully passes in validation mode.
 
 SELF-DESTRUCTING / SCHEDULED ACTIONS HINT: You can create a 'self-destructing'
 automation by setting 'on_completion' to 'delete_self' or 'disable_self'. This is
@@ -215,7 +217,9 @@ script will be created.
 
 DRY-RUN VALIDATION GUIDELINE: You can test if your parameters are valid (including syntax,
 verifying that all entity IDs exist, and verifying that all actions exist) without saving
-by setting 'validate_only' to True.
+by setting 'validate_only' to True. You are strongly encouraged to use validation mode
+first, and only call the actual creation/update operation (setting 'validate_only' to False or
+omitting it) once it successfully passes in validation mode.
 
 IMPORTANT: The sequence must be a valid Home Assistant sequence structure.
 
