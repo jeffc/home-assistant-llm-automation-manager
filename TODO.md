@@ -30,8 +30,8 @@
   - Add a second tag configuration option `one_shot_tag` (default: `one-shot`) to the options flow.
   - When a temporary/one-shot entity (having `delete_self` or `disable_self` completion actions) is created, automatically assign **both** the general tag and this new `one_shot_tag`.
 
-- [ ] **Robust Automation Validation**
-  - Ensure automation validation is a standard and robust feature.
+- [x] **Robust Automation/Script Action & Trigger Validation**
+  - Added checks to prevent creating/updating automations/scripts without actions or triggers. This prevents LLMs from creating empty entities that only self-destruct/disable.
 
 - [ ] **One-Shot Conditional Block Prompting ("do X when Y if Z")**
   - Update the description of `CreateAutomationIntent` in `intent.py` to instruct the LLM:

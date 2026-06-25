@@ -320,6 +320,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Ensure config has the id key
             config_data["id"] = config_key
 
+            # Validate trigger is provided and not empty
+            user_triggers = config_data.get("trigger") or config_data.get("triggers")
+            if not user_triggers:
+                raise ValueError("Automation must contain at least one trigger.")
+            if isinstance(user_triggers, list) and not user_triggers:
+                raise ValueError("Automation must contain at least one trigger.")
+
+            # Validate action is provided and not empty
+            user_actions = config_data.get("action") or config_data.get("actions")
+            if not user_actions:
+                raise ValueError("Automation must contain at least one action.")
+            if isinstance(user_actions, list) and not user_actions:
+                raise ValueError("Automation must contain at least one action.")
+
             # Append completion action if specified
             if on_completion != "persist":
                 actions = config_data.get("action") or config_data.get("actions") or []
@@ -603,6 +617,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             for key in ("alias", "description", "sequence", "mode"):
                 if key in call.data:
                     config_data[key] = _parse_json_fallback(call.data[key])
+
+            # Validate sequence is provided and not empty
+            user_sequence = config_data.get("sequence")
+            if not user_sequence:
+                raise ValueError("Script sequence must contain at least one action.")
+            if isinstance(user_sequence, list) and not user_sequence:
+                raise ValueError("Script sequence must contain at least one action.")
 
             # Append completion action if specified
             if on_completion != "persist":
