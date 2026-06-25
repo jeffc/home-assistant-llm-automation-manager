@@ -56,11 +56,13 @@ omitting it) once it successfully passes in validation mode.
 
 SELF-DESTRUCTING / SCHEDULED ACTIONS HINT: You can create a 'self-destructing'
 automation by setting 'on_completion' to 'delete_self' or 'disable_self'. This is
-highly useful for performing a delayed action in the future (e.g. triggering at a
-specific time or after a delay) or when a condition is met (e.g. when a sensor
-reaches a value). Because it is saved as a standard automation entity, the scheduled
-action can later be cancelled by you or the user by disabling or deleting that
-automation before it triggers.
+highly useful for performing a delayed action in the future.
+IMPORTANT: Disabling or deleting a one-shot automation after it runs must be handled
+solely by setting the 'on_completion' parameter (e.g., to 'delete_self' or 'disable_self').
+You MUST NOT manually include any self-disable or self-delete action (such as calling
+`automation.turn_off` or `automation_script_manager.delete_automation` targeting the
+automation itself) inside the action list. Doing so will fail validation because the
+automation entity does not exist in Home Assistant yet when the tool is called.
 
 IMPORTANT: Triggers, conditions, and actions must be valid Home Assistant structures.
 
@@ -100,9 +102,9 @@ EXAMPLES OF VALID ACTIONS:
             vol.Optional("entity_id"): cv.entity_id,
             vol.Optional("alias"): cv.string,
             vol.Optional("description"): cv.string,
-            vol.Optional("trigger"): vol.Any(list, dict),
+            vol.Required("trigger"): vol.Any(list, dict),
             vol.Optional("condition"): vol.Any(list, dict),
-            vol.Optional("action"): vol.Any(list, dict),
+            vol.Required("action"): vol.Any(list, dict),
             vol.Optional("mode"): cv.string,
             vol.Optional("on_completion"): vol.In(
                 ["delete_self", "disable_self", "persist"]
@@ -221,6 +223,14 @@ by setting 'validate_only' to True. You are strongly encouraged to use validatio
 first, and only call the actual creation/update operation (setting 'validate_only' to False or
 omitting it) once it successfully passes in validation mode.
 
+ONE-SHOT / SELF-DESTRUCTING SCRIPTS HINT: You can create a 'self-destructing' script by
+setting 'on_completion' to 'delete_self'.
+IMPORTANT: Deleting a one-shot script after it runs must be handled solely by setting
+the 'on_completion' parameter to 'delete_self'. You MUST NOT manually include any self-delete
+action (such as calling `automation_script_manager.delete_script` targeting the script itself)
+inside the sequence list. Doing so will fail validation because the script entity does not
+exist in Home Assistant yet when the tool is called.
+
 IMPORTANT: The sequence must be a valid Home Assistant sequence structure.
 
 NOTIFICATION GUIDELINE: When creating a notification action in your sequence, ALWAYS
@@ -252,7 +262,7 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
             vol.Optional("entity_id"): cv.entity_id,
             vol.Optional("alias"): cv.string,
             vol.Optional("description"): cv.string,
-            vol.Optional("sequence"): vol.Any(list, dict),
+            vol.Required("sequence"): vol.Any(list, dict),
             vol.Optional("mode"): cv.string,
             vol.Optional("on_completion"): vol.In(["delete_self", "persist"]),
             vol.Optional("validate_only"): cv.boolean,

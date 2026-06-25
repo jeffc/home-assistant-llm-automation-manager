@@ -42,9 +42,18 @@ A developer script is provided to automate testing. It sets up a virtual environ
 
 ## Configuration Options
 Click the **Configure** button on the integration card to modify global settings:
-1.  **Entity Tag (Label)**: A custom label name (e.g., `AI Generated`) automatically assigned to all created automations and scripts.
-2.  **Restrict deletion to tagged entities only**: Protects your system by preventing delete actions from deleting any entity that does not have the specified tag.
-3.  **Expose AI LLM Tools**: Enable/disable exposing the creation and deletion actions to voice/LLM assistants.
+1.  **Entity Tag (Label)**: A custom label name (e.g., `AI Generated`) automatically assigned to
+    all created automations and scripts.
+2.  **One-Shot Entity Tag (Label)**: A second label name (defaulting to `one-shot`) automatically
+    assigned to all created temporary/one-shot entities in addition to the global tag.
+3.  **Restrict deletion to tagged entities only**: Protects your system by preventing delete actions
+    from deleting any entity that does not have the specified tag.
+4.  **Disable instead of delete**: If enabled, self-destruct/deletion requests will disable
+    automations and modify scripts to prevent execution instead of deleting their files.
+5.  **Disable Override Tag (Label)**: A label name (defaulting to `would-be-deleted`) assigned
+    to entities when they would have been deleted but are instead disabled.
+6.  **Expose AI LLM Tools**: Enable/disable exposing the creation and deletion actions to voice/LLM
+    assistants.
 
 ---
 
@@ -65,6 +74,7 @@ Creates or updates an automation.
 | `action` | list/dict (optional) | Action configuration. |
 | `mode` | string (optional) | Execution mode (`single`, `restart`, `queued`, `parallel`). |
 | `on_completion` | string (optional) | Action after run (`delete_self`, `disable_self`, `persist`). Default: `persist`. |
+| `validate_only` | boolean (optional) | Perform a dry-run validation check without saving. |
 
 **Example YAML:**
 ```yaml
@@ -104,6 +114,7 @@ Creates or updates a script.
 | `sequence` | list/dict (optional) | The script sequence steps. |
 | `mode` | string (optional) | Execution mode. |
 | `on_completion` | string (optional) | Action after run (`delete_self`, `persist`). Default: `persist`. |
+| `validate_only` | boolean (optional) | Perform a dry-run validation check without saving. |
 
 **Example YAML:**
 ```yaml

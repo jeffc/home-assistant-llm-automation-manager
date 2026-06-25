@@ -44,11 +44,16 @@ The `automation_script_manager` integration operates directly on Home Assistant'
 *   **Atomic Writes**: Writing YAML files uses Home Assistant's internal `write_utf8_file_atomic` utility. This writes to a temporary file first, then swaps it atomically on the filesystem to avoid truncating files if writing fails.
 
 ### 2. Validation
-Before saving any changes to disk, the integration invokes Home Assistant's native configuration validation routines:
-*   **Automations**: `homeassistant.components.automation.config.async_validate_config_item`
-*   **Scripts**: `homeassistant.components.script.config.async_validate_config_item`
+Before saving any changes to disk, the integration performs two stages of configuration validation:
+1.  **Reference Verification**: Iterates triggers, conditions, and actions recursively:
+    *   Verifies every referenced `entity_id` is in the states or entity registry
+        (ignoring template expressions and `this` references).
+    *   Verifies every referenced action name is in HA's service registry.
+2.  **Schema Validation**: Invokes HA's native configuration validation routines:
+    *   Automations: `homeassistant.components.automation.config.async_validate_config_item`
+    *   Scripts: `homeassistant.components.script.config.async_validate_config_item`
 
-This checks trigger syntax, action schemas, condition templates, and blueprint inputs. If the validation raises `vol.Invalid` or `HomeAssistantError`, the service call intercepts it and returns structured error feedback.
+This checks trigger syntax, action schemas, condition templates, and blueprint inputs. If any stage raises an exception, the service call catches it and returns structured error feedback.
 
 ### 3. Service Call Responses
 All services are registered with `supports_response=SupportsResponse.OPTIONAL`. 
@@ -64,9 +69,19 @@ This structured design prevents hard exceptions from crashing the LLM tool invoc
 *   **Entity Registration Delay**: Because Home Assistant reloads the automations/scripts asynchronously after writing the files, the entity might not appear in the `entity_registry` instantly. To solve this, `_async_assign_tag` runs a retry loop (up to 5 attempts, waiting 0.5s between retries) to fetch the entity ID, retrieve the entry, and merge the new label ID into `entry.labels`.
 
 ### 5. LLM Intent Mapping
-*   **Intents**: Custom intents (`CreateAutomation`, `DeleteAutomation`, `CreateScript`, `DeleteScript`, `GetExposedNotifyEntities`, `EnumerateActions`, `GetActionDetails`) are registered in [intent.py](file:///home/jeff/code/ai-generated-tools/home-assistant-meta/custom_components/automation_script_manager/intent.py).
-*   **Tool Discovery**: Home Assistant's Assist API automatically gathers all intent handlers registered in the system (excluding a hardcoded `IGNORE_INTENTS` list) and presents them as OpenAPI tools to conversation agents.
-*   **LLM Instructions**: The description property on `CreateAutomationIntent` and `CreateScriptIntent` is heavily populated with YAML examples, guidelines on when to choose automations vs. scripts, and scheduling/cancellation hints. This metadata is parsed by the LLM during function-calling planning. The `GetExposedNotifyEntities` intent allows the LLM to query exposed and available `notify` entities. The `EnumerateActions` intent lists all registered action/service names with their descriptions, and the `GetActionDetails` intent fetches argument/field schemas for any specific action so that the LLM can dynamically build and call actions.
+*   **Intents**: Custom intents (`CreateAutomation`, `DeleteAutomation`, `CreateScript`,
+    `DeleteScript`, `GetExposedNotifyEntities`, `EnumerateActions`, `GetActionDetails`)
+    are registered in [intent.py](file:///home/jeff/code/ai-generated-tools/
+    home-assistant-meta/custom_components/automation_script_manager/intent.py).
+*   **Tool Discovery**: Home Assistant's Assist API automatically gathers all intent handlers
+    registered in the system (excluding a hardcoded `IGNORE_INTENTS` list) and presents them
+    as OpenAPI tools to conversation agents.
+*   **LLM Instructions & Validation**: Intent handler descriptions for creation instruct
+    the LLM to perform deep dry-run validation using the `validate_only` slot before calling
+    with `validate_only=False`. Guidelines also instruct the LLM to gather required action details
+    and entity IDs before attempting any creation calls, and to pass the existing entity `id`
+    when updating to avoid duplicates. It must not include manual self-destruct or
+    self-disable actions in the sequence/action list.
 
 ---
 
@@ -75,3 +90,7 @@ This structured design prevents hard exceptions from crashing the LLM tool invoc
 *   **Upstream Updates**: When updating this component, ensure that the imports from `homeassistant.components.automation.config` and `homeassistant.components.script.config` match the signatures of the targeted Home Assistant core version.
 *   **Voluptuous Schemas**: When modifying service schemas in `__init__.py`, replicate the changes in the `slot_schema` properties inside `intent.py` so the LLM tools remain in sync with the Python services.
 *   **Entity Deletion Registry Cleaning**: When deleting an automation or script, always clean up the entity registry via `ent_reg.async_remove(entity_id)` before triggering the reload. Failing to do so can leave orphan entity registry records (often visible as red circles or read-only entities in the HA UI).
+*   **Delete Overrides**: Under `disable_instead_of_delete`, delete calls are intercepted to
+    disable the automation (setting `initial_state: false` in YAML and turning it off) or
+    modify the script (prepending a notification warning and `stop` action) rather than removing
+    them from the YAML config. Ensure any future changes to deletion logic respect this flow.

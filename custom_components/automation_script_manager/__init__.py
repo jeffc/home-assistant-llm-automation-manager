@@ -213,25 +213,15 @@ async def _async_post_create_processing(
     entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
     tag = ""
     one_shot_tag = ""
-    disable_instead_of_delete = False
-    would_be_deleted_tag = "would-be-deleted"
     if entry:
         tag = entry.options.get("tag", "").strip()
         one_shot_tag = entry.options.get("one_shot_tag", "").strip()
-        disable_instead_of_delete = entry.options.get(
-            "disable_instead_of_delete", False
-        )
-        would_be_deleted_tag = entry.options.get(
-            "would_be_deleted_tag", "would-be-deleted"
-        ).strip()
 
     tags = []
     if tag:
         tags.append(tag)
     if is_one_shot and one_shot_tag:
         tags.append(one_shot_tag)
-    if is_one_shot and disable_instead_of_delete and would_be_deleted_tag:
-        tags.append(would_be_deleted_tag)
 
     # Assign tags if configured
     if tags:
