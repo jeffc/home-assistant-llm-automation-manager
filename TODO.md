@@ -9,7 +9,7 @@
   - Update the validation engine to reject creating or updating automations/scripts that reference any action not allowed under these rules.
 
 
-- [ ] **LLM Generation Debug Mode**
+- [x] **LLM Generation Debug Mode**
   - Add a boolean setting `debug_mode` to the options flow.
   - When enabled, add an optional `reasoning` slot to the `CreateAutomation` and `CreateScript` intents.
   - The intent handler should log this reasoning in `home-assistant.log` and return it somehow to the user.

@@ -49,8 +49,8 @@ A developer script is provided to automate testing. It sets up a virtual environ
 
 ## Configuration Options
 Click the **Configure** button on the integration card to modify global settings:
-1.  **Entity Tag (Label)**: A custom label name (e.g., `AI Generated`) automatically assigned to
-    all created automations and scripts.
+1.  **Entity Tag (Label)**: A custom label name automatically assigned to all created
+    automations and scripts. Defaults to `CREATED_WITH_AUTOMATION`.
 2.  **One-Shot Entity Tag (Label)**: A second label name (defaulting to `one-shot`) automatically
     assigned to all created temporary/one-shot entities in addition to the global tag.
 3.  **Restrict deletion to tagged entities only**: Protects your system by preventing delete actions
@@ -66,9 +66,11 @@ Click the **Configure** button on the integration card to modify global settings
 8.  **Denied Action Regexes**: Regular expressions (one per line) specifying blocked actions.
     Checked before the allowlist.
 9.  **LLM Generation Debug Mode**: Enable debug mode to allow LLM intent handlers to accept an
-    optional reasoning parameter, log it to `home-assistant.log`, and return it. Note that the
-    "reasoning" slot (along with all other tool call outputs) can also be found in the standard
-    Home Assistant "debug conversation" view.
+    optional reasoning parameter, log it to `home-assistant.log`, include it in the description of
+    the generated entity, and return it. Note that the "reasoning" slot (along with all other tool
+    call outputs) can also be found in the standard Home Assistant "debug conversation" view.
+
+*Note: The generation date and time (timestamp) is always automatically appended to the description of any created automation or script.*
 
 ### Regular Expression Action Filtering
 Action permissions are controlled using two multiline text fields on the configuration page:

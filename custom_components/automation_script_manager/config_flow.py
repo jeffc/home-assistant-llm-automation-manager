@@ -87,7 +87,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Tag (label) auto-assigned to all created entities.
                 vol.Optional(
                     "tag",
-                    default=self._options_data.get("tag", ""),
+                    default=self._options_data.get(
+                        "tag", "CREATED_WITH_AUTOMATION"
+                    ),
                 ): str,
                 # Tag (label) auto-assigned to temporary/one-shot entities.
                 vol.Optional(

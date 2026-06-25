@@ -157,6 +157,21 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
             reasoning = slots["reasoning"]["value"]
             _LOGGER.info("CreateAutomation reasoning: %s", reasoning)
 
+        # Append generation timestamp and optional reasoning to the description
+        import datetime
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        generated_info = f"Generated on {now_str}."
+
+        orig_desc = service_data.get("description", "")
+        desc_parts = []
+        if orig_desc:
+            desc_parts.append(orig_desc.strip())
+        desc_parts.append(generated_info)
+        if reasoning:
+            desc_parts.append(f"Reasoning: {reasoning}")
+
+        service_data["description"] = " ".join(desc_parts)
+
         result = await hass.services.async_call(
             DOMAIN,
             "create_automation",
@@ -346,6 +361,21 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
         if options.get("debug_mode", False) and "reasoning" in slots:
             reasoning = slots["reasoning"]["value"]
             _LOGGER.info("CreateScript reasoning: %s", reasoning)
+
+        # Append generation timestamp and optional reasoning to the description
+        import datetime
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        generated_info = f"Generated on {now_str}."
+
+        orig_desc = service_data.get("description", "")
+        desc_parts = []
+        if orig_desc:
+            desc_parts.append(orig_desc.strip())
+        desc_parts.append(generated_info)
+        if reasoning:
+            desc_parts.append(f"Reasoning: {reasoning}")
+
+        service_data["description"] = " ".join(desc_parts)
 
         result = await hass.services.async_call(
             DOMAIN,
