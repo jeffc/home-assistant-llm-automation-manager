@@ -224,32 +224,47 @@ def is_action_allowed_by_regex(
 def is_action_allowed_by_regex_with_reason(
     action: str, allow_regexes_str: str, disallow_regexes_str: str
 ) -> tuple[bool, str]:
-    """Check action name against regex allow/deny lists and return reason."""
+    """Check an action name against allow/deny lists of regular expressions.
+
+    Splits the allow and deny multiline strings into individual lines,
+    ignores empty lines and lines starting with '#' (comments), and matches the
+    action string against each pattern.
+
+    Returns:
+        A tuple of (bool, str) representing (is_allowed, reason_for_decision).
+    """
     import re
 
+    # Parse and clean the allowed regular expressions list.
+    # We strip whitespace and filter out any comments or empty lines.
     allow_lines = [
         line.strip()
         for line in allow_regexes_str.splitlines()
-        if line.strip()
+        if line.strip() and not line.strip().startswith("#")
     ]
+    # Parse and clean the denied regular expressions list.
     disallow_lines = [
         line.strip()
         for line in disallow_regexes_str.splitlines()
-        if line.strip()
+        if line.strip() and not line.strip().startswith("#")
     ]
 
     has_allow = len(allow_lines) > 0
     has_disallow = len(disallow_lines) > 0
 
+    # Helper function to find the first pattern matching the action name.
     def find_matching_pattern(patterns: list[str]) -> str | None:
         for pat in patterns:
             try:
                 if re.search(pat, action):
                     return pat
             except re.error:
+                # Silently ignore invalid regular expressions in configuration.
                 pass
         return None
 
+    # Scenario 1: Only the allow list is specified.
+    # The action must match at least one allow pattern to be permitted.
     if has_allow and not has_disallow:
         match = find_matching_pattern(allow_lines)
         if match:
@@ -259,6 +274,8 @@ def is_action_allowed_by_regex_with_reason(
             "Blocked because it did not match any pattern in the regex allowlist",
         )
 
+    # Scenario 2: Only the disallow/deny list is specified.
+    # The action is allowed unless it matches at least one deny pattern.
     if has_disallow and not has_allow:
         match = find_matching_pattern(disallow_lines)
         if match:
@@ -268,6 +285,10 @@ def is_action_allowed_by_regex_with_reason(
             "Allowed because it did not match any pattern in the regex denylist",
         )
 
+    # Scenario 3: Both allow and disallow lists are specified.
+    # 1. Deny list is checked first. If matched, the action is blocked.
+    # 2. Allow list is checked second. If matched, the action is allowed.
+    # 3. If it matches neither, it is blocked.
     if has_allow and has_disallow:
         match_deny = find_matching_pattern(disallow_lines)
         if match_deny:
@@ -280,65 +301,31 @@ def is_action_allowed_by_regex_with_reason(
             "Blocked because it did not match any pattern in either regex list",
         )
 
+    # Scenario 4: Neither list is specified.
+    # All actions are permitted by default.
     return True, "Allowed by default (no regex lists specified)"
 
 
 def is_action_allowed_with_reason(
     domain: str, service: str, options: dict[str, Any]
 ) -> tuple[bool, str]:
-    """Resolve allowed/denied action and return the reason."""
+    """Determine whether an action is allowed based on the integration options.
+
+    Constructs the full action identifier (domain.service) and checks it
+    against the configured regular expression filters.
+
+    Returns:
+        A tuple of (bool, str) representing (is_allowed, reason).
+    """
     action = f"{domain}.{service}"
+    # Retrieve the allow and disallow lists from options (defaulting to empty strings).
+    allow_regexes = options.get("allow_regexes", "")
+    disallow_regexes = options.get("disallow_regexes", "")
 
-    # 1. Regex check
-    if options.get("use_regex_rules", False):
-        allow_regexes = options.get("allow_regexes", "")
-        disallow_regexes = options.get("disallow_regexes", "")
-        has_regex_rules = bool(
-            allow_regexes.strip() or disallow_regexes.strip()
-        )
-        allowed_by_regex, reason = is_action_allowed_by_regex_with_reason(
-            action, allow_regexes, disallow_regexes
-        )
-        if has_regex_rules:
-            return allowed_by_regex, reason
-        if not allowed_by_regex:
-            return False, reason
-
-    # 2. Hierarchical domain/action check
-    mode = options.get("expose_actions_mode", "allow_all")
-    if mode == "allow_all":
-        return True, "Allowed by default (global mode: allow_all)"
-
-    # 1. Check domain configuration
-    domain_choice = options.get(f"domain_config_{domain}", "global")
-
-    if domain_choice == "per_action":
-        # 2. Check individual action configuration
-        action_choice = options.get(
-            f"action_config_{domain}_{service}", "global"
-        )
-        if action_choice == "allow":
-            return (
-                True,
-                f"Allowed by action config 'action_config_{domain}_{service}'",
-            )
-        if action_choice == "deny":
-            return (
-                False,
-                f"Blocked by action config 'action_config_{domain}_{service}'",
-            )
-
-    elif domain_choice == "allow":
-        return True, f"Allowed by domain config 'domain_config_{domain}'"
-    elif domain_choice == "deny":
-        return False, f"Blocked by domain config 'domain_config_{domain}'"
-
-    # 3. Fall back to global mode logic
-    # "Allow All Except Selected" (expose_all_except) -> default is allowed (True)
-    # "Allow Only Selected" (expose_only_these) -> default is blocked (False)
-    if mode == "expose_all_except":
-        return True, f"Allowed by default fallback (global mode: {mode})"
-    return False, f"Blocked by default fallback (global mode: {mode})"
+    # Delegate the evaluation to the regex check function.
+    return is_action_allowed_by_regex_with_reason(
+        action, allow_regexes, disallow_regexes
+    )
 
 
 def is_action_allowed(
