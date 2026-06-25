@@ -11,8 +11,8 @@ class CreateAutomationIntent(intent.IntentHandler):
     """Handle CreateAutomation intent."""
 
     intent_type = "CreateAutomation"
-    description = """Create or update an automation in Home Assistant. Exposes triggers, conditions,
-and actions.
+    description = """Create or update an automation.
+Exposes triggers, conditions, and actions.
 
 DECISION GUIDELINE: Creating an automation is appropriate when the user wants
 event-driven, conditional, or scheduled behavior (e.g. if the user says 'whenever X, do Y',
