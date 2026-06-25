@@ -1,11 +1,14 @@
 """Intent handlers for the Automation & Script Manager."""
 
+import logging
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent, config_validation as cv
 
 from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 class CreateAutomationIntent(intent.IntentHandler):
     """Handle CreateAutomation intent."""
@@ -59,10 +62,10 @@ automation by setting 'on_completion' to 'delete_self' or 'disable_self'. This i
 highly useful for performing a delayed action in the future.
 IMPORTANT: Disabling or deleting a one-shot automation after it runs must be handled
 solely by setting the 'on_completion' parameter (e.g., to 'delete_self' or 'disable_self').
-You MUST NOT manually include any self-disable or self-delete action (such as calling
-`automation.turn_off` or `automation_script_manager.delete_automation` targeting the
-automation itself) inside the action list. Doing so will fail validation because the
-automation entity does not exist in Home Assistant yet when the tool is called.
+You MUST NOT manually include any self-delete/disable action (such as calling
+`automation_script_manager.delete_automation` or turning off the automation) inside the
+action list. Doing so will fail validation because the automation entity does not
+exist in Home Assistant yet when the tool is called.
 
 CONDITIONS VS IF-THEN BLOCKS IN ONE-SHOTS:
 For persistent automations ('on_completion': 'persist'), top-level 'condition' blocks are
@@ -81,27 +84,9 @@ two options you chose in your final response to the user.
 
 IMPORTANT: Triggers, conditions, and actions must be valid Home Assistant structures.
 
-EXAMPLES OF VALID TRIGGERS:
-- State trigger: [{'platform': 'state', 'entity_id': 'binary_sensor.motion', 'to': 'on'}]
-- Time trigger: [{'platform': 'time', 'at': '07:30:00'}]
-- Numeric state: [{'platform': 'numeric_state', 'entity_id': 'sensor.battery', 'below': 20}]
-- Sun event: [{'platform': 'sun', 'event': 'sunset', 'offset': '+00:30:00'}]
-- Zone trigger: [{'platform': 'zone', 'entity_id': 'person.john', 'zone': 'zone.home',
-  'event': 'enter'}]
-
-EXAMPLES OF VALID CONDITIONS:
-- State condition: [{'condition': 'state', 'entity_id': 'sun.sun', 'state': 'below_horizon'}]
-- Time condition: [{'condition': 'time', 'after': '22:00:00', 'before': '06:00:00'}]
-- Template condition: [{'condition': 'template',
-  'value_template': '{{ states("sensor.battery") | int > 50 }}'}]
-- And condition: [{'condition': 'and', 'conditions': [{'condition': 'state',
-  'entity_id': 'sun.sun', 'state': 'below_horizon'}, {'condition': 'state',
-  'entity_id': 'binary_sensor.motion', 'state': 'off'}]}]
-
-EXAMPLES OF VALID ACTIONS:
-- Turn on entity: [{'action': 'light.turn_on', 'target': {'entity_id': 'light.living_room'},
-  'data': {'brightness_pct': 80}}]
-- Turn off entity: [{'action': 'homeassistant.turn_off', 'target': {'entity_id': 'switch.heater'}}]
+EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
+- Call service: [{'action': 'light.turn_on', 'target': {'entity_id': 'light.living_room'},
+  'data': {'brightness_pct': 50}}]
 - Send notification: [{'action': 'notify.send_message', 'target': {'entity_id': 'notify.jeff'},
   'data': {'message': 'Intrusion!', 'title': 'Alert'}}]
 - Delay sequence: [{'delay': '00:01:00'}] (delay for 1 minute)
@@ -109,10 +94,15 @@ EXAMPLES OF VALID ACTIONS:
   'state': 'below_horizon'}], 'then': [{'action': 'light.turn_on',
   'target': {'entity_id': 'light.hallway'}}]}]"""
 
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
+
     @property
     def slot_schema(self) -> dict | None:
         """Return slot schema."""
-        return {
+        schema = {
             vol.Optional("id"): cv.string,
             vol.Optional("entity_id"): cv.entity_id,
             vol.Optional("alias"): cv.string,
@@ -126,6 +116,14 @@ EXAMPLES OF VALID ACTIONS:
             ),
             vol.Optional("validate_only"): cv.boolean,
         }
+
+        # Check if debug mode is enabled. If so, add optional reasoning slot.
+        entry = next(iter(self.hass.config_entries.async_entries(DOMAIN)), None)
+        options = entry.options if entry else {}
+        if options.get("debug_mode", False):
+            schema[vol.Optional("reasoning")] = cv.string
+
+        return schema
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         """Handle the intent by calling our service."""
@@ -151,6 +149,14 @@ EXAMPLES OF VALID ACTIONS:
         # Force exposing the created automation to the AI
         service_data["expose_to_ai"] = True
 
+        # Extract and log reasoning if debug mode is enabled
+        reasoning = None
+        entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
+        options = entry.options if entry else {}
+        if options.get("debug_mode", False) and "reasoning" in slots:
+            reasoning = slots["reasoning"]["value"]
+            _LOGGER.info("CreateAutomation reasoning: %s", reasoning)
+
         result = await hass.services.async_call(
             DOMAIN,
             "create_automation",
@@ -162,10 +168,20 @@ EXAMPLES OF VALID ACTIONS:
 
         response = intent_obj.create_response()
         if result and result.get("success"):
-            response.async_set_speech(f"Automation '{result.get('id')}' created successfully.")
+            msg = f"Automation '{result.get('id')}' created successfully."
+            if reasoning:
+                msg += f" Reasoning: {reasoning}"
+                response.async_set_speech(msg, extra_data={"reasoning": reasoning})
+            else:
+                response.async_set_speech(msg)
         else:
             error_msg = result.get("error") if result else "Unknown error"
-            response.async_set_speech(f"Failed to create automation: {error_msg}")
+            msg = f"Failed to create automation: {error_msg}"
+            if reasoning:
+                msg += f" Reasoning: {reasoning}"
+                response.async_set_speech(msg, extra_data={"reasoning": reasoning})
+            else:
+                response.async_set_speech(msg)
         return response
 
 
@@ -177,6 +193,11 @@ class DeleteAutomationIntent(intent.IntentHandler):
         "Delete an automation from Home Assistant. Restricts to specific "
         "tag if configured."
     )
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
 
     @property
     def slot_schema(self) -> dict | None:
@@ -269,10 +290,15 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
   'entity_id': 'binary_sensor.motion', 'state': 'on'}], 'sequence': [{'action': 'light.turn_on',
   'target': {'entity_id': 'light.living_room'}}]}]}]"""
 
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
+
     @property
     def slot_schema(self) -> dict | None:
         """Return slot schema."""
-        return {
+        schema = {
             vol.Optional("id"): cv.string,
             vol.Optional("entity_id"): cv.entity_id,
             vol.Optional("alias"): cv.string,
@@ -282,6 +308,14 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
             vol.Optional("on_completion"): vol.In(["delete_self", "persist"]),
             vol.Optional("validate_only"): cv.boolean,
         }
+
+        # Check if debug mode is enabled. If so, add optional reasoning slot.
+        entry = next(iter(self.hass.config_entries.async_entries(DOMAIN)), None)
+        options = entry.options if entry else {}
+        if options.get("debug_mode", False):
+            schema[vol.Optional("reasoning")] = cv.string
+
+        return schema
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         """Handle the intent by calling our service."""
@@ -305,6 +339,14 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
         # Force exposing the created script to the AI
         service_data["expose_to_ai"] = True
 
+        # Extract and log reasoning if debug mode is enabled
+        reasoning = None
+        entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
+        options = entry.options if entry else {}
+        if options.get("debug_mode", False) and "reasoning" in slots:
+            reasoning = slots["reasoning"]["value"]
+            _LOGGER.info("CreateScript reasoning: %s", reasoning)
+
         result = await hass.services.async_call(
             DOMAIN,
             "create_script",
@@ -316,10 +358,20 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
 
         response = intent_obj.create_response()
         if result and result.get("success"):
-            response.async_set_speech(f"Script '{result.get('id')}' created successfully.")
+            msg = f"Script '{result.get('id')}' created successfully."
+            if reasoning:
+                msg += f" Reasoning: {reasoning}"
+                response.async_set_speech(msg, extra_data={"reasoning": reasoning})
+            else:
+                response.async_set_speech(msg)
         else:
             error_msg = result.get("error") if result else "Unknown error"
-            response.async_set_speech(f"Failed to create script: {error_msg}")
+            msg = f"Failed to create script: {error_msg}"
+            if reasoning:
+                msg += f" Reasoning: {reasoning}"
+                response.async_set_speech(msg, extra_data={"reasoning": reasoning})
+            else:
+                response.async_set_speech(msg)
         return response
 
 
@@ -328,6 +380,11 @@ class DeleteScriptIntent(intent.IntentHandler):
 
     intent_type = "DeleteScript"
     description = "Delete a script from Home Assistant. Restricts to specific tag if configured."
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
 
     @property
     def slot_schema(self) -> dict | None:
@@ -374,6 +431,11 @@ class GetExposedNotifyEntitiesIntent(intent.IntentHandler):
         "AI/conversation assistant."
     )
 
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
+
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         """Handle the intent."""
         hass = intent_obj.hass
@@ -417,6 +479,11 @@ class EnumerateActionsIntent(intent.IntentHandler):
         "Assistant with a short description."
     )
 
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
+
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         """Handle the intent."""
         hass = intent_obj.hass
@@ -453,6 +520,11 @@ class GetActionDetailsIntent(intent.IntentHandler):
 
     intent_type = "GetActionDetails"
     description = "Get detailed information about an action (service) and its arguments."
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
 
     @property
     def slot_schema(self) -> dict | None:
@@ -518,10 +590,10 @@ class GetActionDetailsIntent(intent.IntentHandler):
 
 async def async_setup_intents(hass: HomeAssistant) -> None:
     """Register intents with the Home Assistant intent system."""
-    intent.async_register(hass, CreateAutomationIntent())
-    intent.async_register(hass, DeleteAutomationIntent())
-    intent.async_register(hass, CreateScriptIntent())
-    intent.async_register(hass, DeleteScriptIntent())
-    intent.async_register(hass, GetExposedNotifyEntitiesIntent())
-    intent.async_register(hass, EnumerateActionsIntent())
-    intent.async_register(hass, GetActionDetailsIntent())
+    intent.async_register(hass, CreateAutomationIntent(hass))
+    intent.async_register(hass, DeleteAutomationIntent(hass))
+    intent.async_register(hass, CreateScriptIntent(hass))
+    intent.async_register(hass, DeleteScriptIntent(hass))
+    intent.async_register(hass, GetExposedNotifyEntitiesIntent(hass))
+    intent.async_register(hass, EnumerateActionsIntent(hass))
+    intent.async_register(hass, GetActionDetailsIntent(hass))

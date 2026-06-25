@@ -118,19 +118,24 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "expose_llm_tools",
                     default=self._options_data.get("expose_llm_tools", True),
                 ): bool,
-                # Regular expression patterns for allowed service actions.
+                # Enable debug mode to log and return LLM reasoning.
                 vol.Optional(
-                    "allow_regexes",
-                    default=self._options_data.get("allow_regexes", ".*"),
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
+                    "debug_mode",
+                    default=self._options_data.get("debug_mode", False),
+                ): bool,
                 # Regular expression patterns for blocked service actions.
                 vol.Optional(
                     "disallow_regexes",
                     default=self._options_data.get(
                         "disallow_regexes", "homeassistant\\..*"
                     ),
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
+                # Regular expression patterns for allowed service actions.
+                vol.Optional(
+                    "allow_regexes",
+                    default=self._options_data.get("allow_regexes", ".*"),
                 ): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),

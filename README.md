@@ -65,11 +65,17 @@ Click the **Configure** button on the integration card to modify global settings
     Leave empty to default to allowing all actions.
 8.  **Denied Action Regexes**: Regular expressions (one per line) specifying blocked actions.
     Checked before the allowlist.
+9.  **LLM Generation Debug Mode**: Enable debug mode to allow LLM intent handlers to accept an
+    optional reasoning parameter, log it to `home-assistant.log`, and return it. Note that the
+    "reasoning" slot (along with all other tool call outputs) can also be found in the standard
+    Home Assistant "debug conversation" view.
 
 ### Regular Expression Action Filtering
 Action permissions are controlled using two multiline text fields on the configuration page:
-*   **Allowed Action Regexes**: Regular expressions matching allowed actions. Defaults to `.*` (allow all).
-*   **Denied Action Regexes**: Regular expressions matching blocked actions. Defaults to `homeassistant\..*`.
+*   **Denied Action Regexes**: Regular expressions matching blocked actions.
+    Defaults to `homeassistant\..*`.
+*   **Allowed Action Regexes**: Regular expressions matching allowed actions.
+    Defaults to `.*` (allow all).
 
 Lines starting with `#` are treated as comments and ignored.
 
@@ -77,8 +83,70 @@ Lines starting with `#` are treated as comments and ignored.
 1.  **Neither specified (empty)**: All actions are permitted.
 2.  **Only Allowed specified**: Only actions matching one or more allowed regexes are permitted.
 3.  **Only Denied specified**: All actions are permitted except those matching one or more denied regexes.
-4.  **Both specified**: Denied list is checked first (matching blocks the action). If not denied, it must match one or more allowed regexes to be permitted; otherwise, it is blocked.
-5.  **Wildcard matching**: Adding a wildcard (`.*`) to the end of the allowlist will allow any action except those explicitly matched on the denylist.
+4.  **Both specified**: Denied list is checked first (matching blocks the action). If not denied,
+    it must match one or more allowed regexes to be permitted; otherwise, it is blocked.
+5.  **Wildcard matching**: Adding a wildcard (`.*`) to the end of the allowlist
+    will allow any action except those explicitly matched on the denylist.
+
+#### Examples of Regex Policies
+
+##### Scenario A: Permissive Mode with System Safety (Default)
+Allows all actions except sensitive system-level commands.
+*   **Denied Action Regexes:**
+    ```text
+    # Block internal Home Assistant controls, updates, and integrations setup
+    homeassistant\..*
+    update\..*
+    hassio\..*
+    ```
+*   **Allowed Action Regexes:**
+    ```text
+    # Allow all other domains and actions
+    .*
+    ```
+
+##### Scenario B: Minimalist Strict Allowlist
+AI can only control lights, media players, and climate settings.
+*   **Denied Action Regexes:**
+    *(Empty)*
+*   **Allowed Action Regexes:**
+    ```text
+    # Explicitly permit only these safe domains
+    light\..*
+    media_player\..*
+    climate\..*
+    ```
+
+##### Scenario C: Lock & Security Protection (Block Specific Services)
+Allows broad control but prevents the LLM from unlocking doors or opening garage doors.
+*   **Denied Action Regexes:**
+    ```text
+    # Block physical entry/security actions
+    lock\.unlock
+    cover\.open
+    alarm_control_panel\.alarm_disarm
+    ```
+*   **Allowed Action Regexes:**
+    ```text
+    # Allow everything except the blocked security actions
+    .*
+    ```
+
+##### Scenario D: Combined Strict Policy
+Allow only home entertainment controls, but prevent turning off any security cameras or sirens.
+*   **Denied Action Regexes:**
+    ```text
+    # Prevent disabling safety alerts
+    siren\.turn_off
+    camera\.turn_off
+    ```
+*   **Allowed Action Regexes:**
+    ```text
+    # Allow media players, lights, and switches
+    media_player\..*
+    light\..*
+    switch\..*
+    ```
 
 ---
 

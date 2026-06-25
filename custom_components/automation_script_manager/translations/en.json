@@ -22,8 +22,9 @@
           "disable_instead_of_delete": "Disable instead of delete",
           "would_be_deleted_tag": "Disable Override Tag (Label)",
           "expose_llm_tools": "Expose AI LLM Tools",
-          "allow_regexes": "Allowed Action Regexes",
-          "disallow_regexes": "Denied Action Regexes"
+          "debug_mode": "LLM Generation Debug Mode",
+          "disallow_regexes": "Denied Action Regexes",
+          "allow_regexes": "Allowed Action Regexes"
         },
         "data_description": {
           "tag": "The tag (label name) to assign automatically to all created automations/scripts. If the label doesn't exist, it will be registered in Home Assistant.",
@@ -32,8 +33,9 @@
           "disable_instead_of_delete": "If enabled, automations and scripts that would be deleted (either via service call or self-destruct completion action) are disabled/modified to prevent execution rather than removed.",
           "would_be_deleted_tag": "The tag (label name) to assign specifically to entities that have been disabled instead of deleted.",
           "expose_llm_tools": "Expose the creation and deletion actions as tools to conversation LLM agents.",
-          "allow_regexes": "List of regular expressions (one per line, e.g. 'light\\..*') specifying allowed actions. If specified, only actions matching one or more rules will be permitted. Lines starting with # are treated as comments.",
-          "disallow_regexes": "List of regular expressions (one per line, e.g. 'homeassistant\\..*') specifying blocked actions. Checked first; matches are immediately blocked. Lines starting with # are treated as comments."
+          "debug_mode": "If enabled, LLM intent handlers will accept an optional reasoning parameter, log it to the system log, and include it in the response.",
+          "disallow_regexes": "List of regular expressions (one per line, e.g. 'homeassistant\\..*') specifying blocked actions. Checked first; matches are immediately blocked. Lines starting with # are treated as comments.",
+          "allow_regexes": "List of regular expressions (one per line, e.g. 'light\\..*') specifying allowed actions. If specified, only actions matching one or more rules will be permitted. Lines starting with # are treated as comments."
         }
       }
     }
