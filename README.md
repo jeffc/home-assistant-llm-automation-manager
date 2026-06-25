@@ -9,6 +9,13 @@ A custom integration for Home Assistant that allows you to programmatically crea
 *   **Safety & Tagging**: Automatically assign a label/tag (e.g., `AI Generated`) to entities created via this manager, and optionally restrict deletions so only tagged entities can be deleted.
 *   **Structured Feedback**: Services support optional responses. If the YAML configuration fails validation (using Home Assistant Core's native validation engine), the action returns `{"success": false, "error": "Reason"}` to let humans or LLM agents read and correct the parameters.
 
+> [!WARNING]
+> **Important File Writing & Reload Behavior**
+> 
+> This integration directly modifies `automations.yaml` and `scripts.yaml` and triggers an engine reload (`automation.reload` or `script.reload`) to apply the changes immediately.
+> 
+> If you have unapplied manual changes in these files, triggering any service call through this integration will reload the entire configuration from disk, causing those manual changes to become active unexpectedly. Make sure to commit or apply manual modifications before using this integration.
+
 ---
 
 ## Directory Structure
