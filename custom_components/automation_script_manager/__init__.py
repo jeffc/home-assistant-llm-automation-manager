@@ -64,6 +64,7 @@ CREATE_AUTOMATION_SCHEMA = vol.Schema(
             ["delete_self", "disable_self", "persist"]
         ),
         vol.Optional("expose_to_ai", default=False): cv.boolean,
+        vol.Optional("validate_only", default=False): cv.boolean,
     }
 )
 
@@ -87,6 +88,7 @@ CREATE_SCRIPT_SCHEMA = vol.Schema(
             ["delete_self", "persist"]
         ),
         vol.Optional("expose_to_ai", default=False): cv.boolean,
+        vol.Optional("validate_only", default=False): cv.boolean,
     }
 )
 
@@ -122,6 +124,53 @@ def _parse_json_fallback(value: Any) -> Any:
                 except Exception:
                     pass
     return value
+
+def _extract_entity_ids(data: Any) -> set[str]:
+    """Recursively extract all entity IDs from triggers, conditions, or actions."""
+    entity_ids = set()
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key in ("entity_id", "entity_ids"):
+                if isinstance(value, str):
+                    entity_ids.add(value)
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, str):
+                            entity_ids.add(item)
+            else:
+                entity_ids.update(_extract_entity_ids(value))
+    elif isinstance(data, list):
+        for item in data:
+            entity_ids.update(_extract_entity_ids(item))
+
+    # Skip templates and 'this' references
+    valid_entity_ids = set()
+    for ent in entity_ids:
+        if isinstance(ent, str):
+            ent = ent.strip()
+            if "{" in ent or "}" in ent:
+                continue
+            if ent.startswith("this.") or ent == "this":
+                continue
+            valid_entity_ids.add(ent)
+    return valid_entity_ids
+
+
+def _extract_actions(data: Any) -> set[str]:
+    """Recursively extract all action names from actions list."""
+    actions = set()
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key in ("action", "service"):
+                if isinstance(value, str) and "." in value:
+                    actions.add(value)
+            else:
+                actions.update(_extract_actions(value))
+    elif isinstance(data, list):
+        for item in data:
+            actions.update(_extract_actions(item))
+    return actions
+
 
 def _read_yaml(path: str) -> Any:
     """Read YAML helper."""
@@ -280,6 +329,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             config_key = call.data.get("id")
             entity_id = call.data.get("entity_id")
             on_completion = call.data.get("on_completion", "persist")
+            validate_only = call.data.get("validate_only", False)
             config_data = {}
 
             if "config" in call.data:
@@ -362,8 +412,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 actions.append(completion_action)
                 config_data["action"] = actions
 
+            # Extract and validate all entity IDs referenced
+            entity_ids = _extract_entity_ids(config_data)
+            ent_reg = er.async_get(hass)
+            for ent in entity_ids:
+                if "." not in ent:
+                    raise ValueError(f"Entity ID '{ent}' is invalid")
+                if (
+                    hass.states.get(ent) is None
+                    and ent_reg.async_get(ent) is None
+                ):
+                    raise ValueError(
+                        f"Entity ID '{ent}' does not exist in Home Assistant"
+                    )
+
+            # Extract and validate all action names referenced
+            actions_list = _extract_actions(config_data)
+            domain_services = hass.services.async_services()
+            for act in actions_list:
+                if "." not in act:
+                    raise ValueError(
+                        f"Action '{act}' must be in the format 'domain.action'"
+                    )
+                domain, service = act.split(".", 1)
+                if (
+                    domain not in domain_services
+                    or service not in domain_services[domain]
+                ):
+                    raise ValueError(
+                        f"Action '{act}' is not registered in Home Assistant"
+                    )
+
             # Validate the configuration
             await async_validate_automation_item(hass, config_key, config_data)
+
+            if validate_only:
+                _LOGGER.info(
+                    "Dry-run validation successful for automation '%s'",
+                    config_key,
+                )
+                return {"success": True, "id": config_key}
 
             # Order fields standardly like EditAutomationConfigView
             updated_value = {"id": config_key}
@@ -586,6 +674,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             config_key = call.data.get("id")
             entity_id = call.data.get("entity_id")
             on_completion = call.data.get("on_completion", "persist")
+            validate_only = call.data.get("validate_only", False)
 
             if not config_key and not entity_id:
                 raise ValueError("Either 'id' or 'entity_id' must be provided")
@@ -644,8 +733,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 sequence.append(completion_action)
                 config_data["sequence"] = sequence
 
+            # Extract and validate all entity IDs referenced
+            entity_ids = _extract_entity_ids(config_data)
+            ent_reg = er.async_get(hass)
+            for ent in entity_ids:
+                if "." not in ent:
+                    raise ValueError(f"Entity ID '{ent}' is invalid")
+                if (
+                    hass.states.get(ent) is None
+                    and ent_reg.async_get(ent) is None
+                ):
+                    raise ValueError(
+                        f"Entity ID '{ent}' does not exist in Home Assistant"
+                    )
+
+            # Extract and validate all action names referenced
+            actions_list = _extract_actions(config_data)
+            domain_services = hass.services.async_services()
+            for act in actions_list:
+                if "." not in act:
+                    raise ValueError(
+                        f"Action '{act}' must be in the format 'domain.action'"
+                    )
+                domain, service = act.split(".", 1)
+                if (
+                    domain not in domain_services
+                    or service not in domain_services[domain]
+                ):
+                    raise ValueError(
+                        f"Action '{act}' is not registered in Home Assistant"
+                    )
+
             # Validate the configuration
             await async_validate_script_item(hass, config_key, config_data)
+
+            if validate_only:
+                _LOGGER.info(
+                    "Dry-run validation successful for script '%s'",
+                    config_key,
+                )
+                return {"success": True, "id": config_key}
 
             path = hass.config.path(SCRIPT_CONFIG_PATH)
             lock = hass.data[DOMAIN]["script_lock"]

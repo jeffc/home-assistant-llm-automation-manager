@@ -48,6 +48,10 @@ created in a previous turn, you MUST pass the `id` field of that automation (usi
 ID returned in the previous tool output or retrieved from the registry). Otherwise, a duplicate
 automation will be created.
 
+DRY-RUN VALIDATION GUIDELINE: You can test if your parameters are valid (including syntax,
+verifying that all entity IDs exist, and verifying that all actions exist) without saving
+by setting 'validate_only' to True.
+
 SELF-DESTRUCTING / SCHEDULED ACTIONS HINT: You can create a 'self-destructing'
 automation by setting 'on_completion' to 'delete_self' or 'disable_self'. This is
 highly useful for performing a delayed action in the future (e.g. triggering at a
@@ -98,7 +102,10 @@ EXAMPLES OF VALID ACTIONS:
             vol.Optional("condition"): vol.Any(list, dict),
             vol.Optional("action"): vol.Any(list, dict),
             vol.Optional("mode"): cv.string,
-            vol.Optional("on_completion"): vol.In(["delete_self", "disable_self", "persist"]),
+            vol.Optional("on_completion"): vol.In(
+                ["delete_self", "disable_self", "persist"]
+            ),
+            vol.Optional("validate_only"): cv.boolean,
         }
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
@@ -117,6 +124,7 @@ EXAMPLES OF VALID ACTIONS:
             "action",
             "mode",
             "on_completion",
+            "validate_only",
         ):
             if key in slots:
                 service_data[key] = slots[key]["value"]
@@ -205,6 +213,10 @@ in a previous turn, you MUST pass the `id` field of that script (using the ID re
 in the previous tool output or retrieved from the registry). Otherwise, a duplicate
 script will be created.
 
+DRY-RUN VALIDATION GUIDELINE: You can test if your parameters are valid (including syntax,
+verifying that all entity IDs exist, and verifying that all actions exist) without saving
+by setting 'validate_only' to True.
+
 IMPORTANT: The sequence must be a valid Home Assistant sequence structure.
 
 NOTIFICATION GUIDELINE: When creating a notification action in your sequence, ALWAYS
@@ -239,6 +251,7 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
             vol.Optional("sequence"): vol.Any(list, dict),
             vol.Optional("mode"): cv.string,
             vol.Optional("on_completion"): vol.In(["delete_self", "persist"]),
+            vol.Optional("validate_only"): cv.boolean,
         }
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
@@ -255,6 +268,7 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
             "sequence",
             "mode",
             "on_completion",
+            "validate_only",
         ):
             if key in slots:
                 service_data[key] = slots[key]["value"]
