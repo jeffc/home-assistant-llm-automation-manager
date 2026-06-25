@@ -37,6 +37,17 @@ names like `notify.jeff`) unless explicitly requested by the user, and target th
 correct notify entity ID from the entity registry/list (e.g. targeting
 `notify.mobile_app_jeff` or `notify.jeff`).
 
+GATHER THEN ACT GUIDELINE: You MUST NOT call this tool until all relevant details (such
+as entity IDs and action argument structures) have been confirmed. If you do not know the
+required parameters for an action, you must first call `GetActionDetails` or check exposed
+entities rather than guessing or calling `CreateAutomation` with incomplete details.
+
+ATOMICITY & ID PROPAGATION GUIDELINE: Do not call this tool incrementally to construct
+or update an automation in parts. If you are modifying/updating an existing automation
+created in a previous turn, you MUST pass the `id` field of that automation (using the
+ID returned in the previous tool output or retrieved from the registry). Otherwise, a duplicate
+automation will be created.
+
 SELF-DESTRUCTING / SCHEDULED ACTIONS HINT: You can create a 'self-destructing'
 automation by setting 'on_completion' to 'delete_self' or 'disable_self'. This is
 highly useful for performing a delayed action in the future (e.g. triggering at a
@@ -135,7 +146,10 @@ class DeleteAutomationIntent(intent.IntentHandler):
     """Handle DeleteAutomation intent."""
 
     intent_type = "DeleteAutomation"
-    description = "Delete an automation from Home Assistant. Restricts to specific tag if configured."
+    description = (
+        "Delete an automation from Home Assistant. Restricts to specific "
+        "tag if configured."
+    )
 
     @property
     def slot_schema(self) -> dict | None:
@@ -179,6 +193,17 @@ class CreateScriptIntent(intent.IntentHandler):
     intent_type = "CreateScript"
     description = """Create or update a script in Home Assistant. Scripts define a sequence
 of actions.
+
+GATHER THEN ACT GUIDELINE: You MUST NOT call this tool until all relevant details (such
+as entity IDs and action argument structures) have been confirmed. If you do not know the
+required parameters for an action, you must first call `GetActionDetails` or check exposed
+entities rather than guessing or calling `CreateScript` with incomplete details.
+
+ATOMICITY & ID PROPAGATION GUIDELINE: Do not call this tool incrementally to construct
+or update a script in parts. If you are modifying/updating an existing script created
+in a previous turn, you MUST pass the `id` field of that script (using the ID returned
+in the previous tool output or retrieved from the registry). Otherwise, a duplicate
+script will be created.
 
 IMPORTANT: The sequence must be a valid Home Assistant sequence structure.
 
@@ -301,7 +326,10 @@ class GetExposedNotifyEntitiesIntent(intent.IntentHandler):
     """Handle GetExposedNotifyEntities intent."""
 
     intent_type = "GetExposedNotifyEntities"
-    description = "Get the list of notify entities that are exposed to the AI/conversation assistant."
+    description = (
+        "Get the list of notify entities that are exposed to the "
+        "AI/conversation assistant."
+    )
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         """Handle the intent."""
@@ -329,7 +357,10 @@ class GetExposedNotifyEntitiesIntent(intent.IntentHandler):
                 f"The following notify entities are exposed to AI/Assist:\n{entities_str}"
             )
         else:
-            response.async_set_speech("No notify entities are currently exposed to the AI/conversation assistant.")
+            response.async_set_speech(
+                "No notify entities are currently exposed to the "
+                "AI/conversation assistant."
+            )
 
         return response
 
