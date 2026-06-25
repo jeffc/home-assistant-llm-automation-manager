@@ -17,12 +17,18 @@
         "description": "Configure the global settings for Automation & Script Manager.",
         "data": {
           "tag": "Entity Tag (Label)",
+          "one_shot_tag": "One-Shot Entity Tag (Label)",
           "restrict_deletion": "Restrict deletion to tagged entities only",
+          "disable_instead_of_delete": "Disable instead of delete",
+          "would_be_deleted_tag": "Disable Override Tag (Label)",
           "expose_llm_tools": "Expose AI LLM Tools"
         },
         "data_description": {
           "tag": "The tag (label name) to assign automatically to all created automations/scripts. If the label doesn't exist, it will be registered in Home Assistant.",
+          "one_shot_tag": "A second tag (label name) to assign specifically to temporary/one-shot entities (i.e. those with a self-destruct completion action), in addition to the global entity tag.",
           "restrict_deletion": "If enabled, delete actions will fail for any automation or script that does not have the specified tag.",
+          "disable_instead_of_delete": "If enabled, automations and scripts that would be deleted (either via service call or self-destruct completion action) are disabled/modified to prevent execution rather than removed.",
+          "would_be_deleted_tag": "The tag (label name) to assign specifically to entities that have been disabled instead of deleted.",
           "expose_llm_tools": "Expose the creation and deletion actions as tools to conversation LLM agents."
         }
       }

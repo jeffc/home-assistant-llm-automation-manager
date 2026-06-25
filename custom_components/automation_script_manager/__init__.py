@@ -98,7 +98,7 @@ DELETE_SCRIPT_SCHEMA = vol.Schema(
 )
 
 def _parse_json_fallback(value: Any) -> Any:
-    """Parse JSON/Python string if the value is wrapped in a dict with 'json' key or is a string itself."""
+    """Parse JSON/Python string if value is wrapped in a dict or is a string itself."""
     if isinstance(value, dict) and "json" in value:
         val_json = value["json"]
         if isinstance(val_json, str):
@@ -111,7 +111,9 @@ def _parse_json_fallback(value: Any) -> Any:
                     pass
     elif isinstance(value, str):
         trimmed = value.strip()
-        if (trimmed.startswith("[") and trimmed.endswith("]")) or (trimmed.startswith("{") and trimmed.endswith("}")):
+        is_list = trimmed.startswith("[") and trimmed.endswith("]")
+        is_dict = trimmed.startswith("{") and trimmed.endswith("}")
+        if is_list or is_dict:
             try:
                 return json.loads(trimmed)
             except Exception:
@@ -133,7 +135,11 @@ def _write_yaml(path: str, data: Any) -> None:
     write_utf8_file_atomic(path, contents)
 
 async def _async_post_create_processing(
-    hass: HomeAssistant, domain: str, config_key: str, tag: str, expose_to_ai: bool
+    hass: HomeAssistant,
+    domain: str,
+    config_key: str,
+    expose_to_ai: bool,
+    is_one_shot: bool = False,
 ) -> None:
     """Assign tag and expose entity to AI helper."""
     ent_reg = er.async_get(hass)
@@ -154,31 +160,65 @@ async def _async_post_create_processing(
         )
         return
 
-    # Assign tag if configured and tag is non-empty
+    # Retrieve options
+    entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
+    tag = ""
+    one_shot_tag = ""
+    disable_instead_of_delete = False
+    would_be_deleted_tag = "would-be-deleted"
+    if entry:
+        tag = entry.options.get("tag", "").strip()
+        one_shot_tag = entry.options.get("one_shot_tag", "").strip()
+        disable_instead_of_delete = entry.options.get(
+            "disable_instead_of_delete", False
+        )
+        would_be_deleted_tag = entry.options.get(
+            "would_be_deleted_tag", "would-be-deleted"
+        ).strip()
+
+    tags = []
     if tag:
+        tags.append(tag)
+    if is_one_shot and one_shot_tag:
+        tags.append(one_shot_tag)
+    if is_one_shot and disable_instead_of_delete and would_be_deleted_tag:
+        tags.append(would_be_deleted_tag)
+
+    # Assign tags if configured
+    if tags:
         label_reg = lr.async_get(hass)
-        label = label_reg.async_get_label_by_name(tag)
-        if label is None:
-            try:
-                label = label_reg.async_create(tag)
-            except ValueError:
-                # Fallback if label is already in use by name (concurrency)
-                label = next(
-                    (l for l in label_reg.labels.values() if l.name.lower() == tag.lower()),
-                    None,
-                )
-        if label:
-            label_id = label.label_id
+        label_ids = set()
+        for t in tags:
+            label = label_reg.async_get_label_by_name(t)
+            if label is None:
+                try:
+                    label = label_reg.async_create(t)
+                except ValueError:
+                    # Fallback if label is already in use by name (concurrency)
+                    label = next(
+                        (
+                            l
+                            for l in label_reg.labels.values()
+                            if l.name.lower() == t.lower()
+                        ),
+                        None,
+                    )
+            if label:
+                label_ids.add(label.label_id)
+
+        if label_ids:
             reg_entry = ent_reg.async_get(entity_id)
             if reg_entry:
-                new_labels = reg_entry.labels | {label_id}
+                new_labels = reg_entry.labels | label_ids
                 ent_reg.async_update_entity(entity_id, labels=new_labels)
-                _LOGGER.info("Assigned tag '%s' to entity '%s'", tag, entity_id)
+                _LOGGER.info("Assigned tags %s to entity '%s'", tags, entity_id)
 
     # Expose to voice assistant/AI if requested
     if expose_to_ai:
         try:
-            from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+            from homeassistant.components.homeassistant.exposed_entities import (
+                async_expose_entity,
+            )
             async_expose_entity(hass, "conversation", entity_id, True)
             _LOGGER.info("Exposed entity '%s' to AI (conversation)", entity_id)
         except Exception as err:
@@ -220,7 +260,8 @@ def _verify_deletion_restriction(
 
     if not label_id or label_id not in reg_entry.labels:
         raise HomeAssistantError(
-            f"Deletion restricted: {domain.capitalize()} '{config_key}' does not have the required tag '{tag}'"
+            f"Deletion restricted: {domain.capitalize()} '{config_key}' "
+            f"does not have the required tag '{tag}'"
         )
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
@@ -361,10 +402,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.info("Successfully created/updated automation '%s'", config_key)
 
             # Assign tag and expose if configured
-            tag = entry.options.get("tag", "").strip()
+            is_one_shot = on_completion != "persist"
             expose_to_ai = call.data.get("expose_to_ai", False)
             await _async_post_create_processing(
-                hass, AUTOMATION_DOMAIN, config_key, tag, expose_to_ai
+                hass,
+                AUTOMATION_DOMAIN,
+                config_key,
+                expose_to_ai,
+                is_one_shot=is_one_shot,
             )
 
             return {"success": True, "id": config_key}
@@ -392,6 +437,94 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Verify deletion restriction
             _verify_deletion_restriction(hass, AUTOMATION_DOMAIN, config_key)
+
+            disable_instead_of_delete = entry.options.get(
+                "disable_instead_of_delete", False
+            )
+            would_be_deleted_tag = entry.options.get(
+                "would_be_deleted_tag", "would-be-deleted"
+            ).strip()
+
+            if disable_instead_of_delete:
+                path = hass.config.path(AUTOMATION_CONFIG_PATH)
+                lock = hass.data[DOMAIN]["automation_lock"]
+
+                async with lock:
+                    current = await hass.async_add_executor_job(_read_yaml, path)
+                    if current is None:
+                        current = []
+                    elif not isinstance(current, list):
+                        raise ValueError("automations.yaml is not a list")
+
+                    found = False
+                    for index, cur_value in enumerate(current):
+                        if (
+                            isinstance(cur_value, dict)
+                            and cur_value.get("id") == config_key
+                        ):
+                            cur_value["initial_state"] = False
+                            found = True
+                            break
+
+                    if not found:
+                        raise ValueError(
+                            f"Automation with ID '{config_key}' not found"
+                        )
+
+                    await hass.async_add_executor_job(_write_yaml, path, current)
+
+                # Reload automations
+                await hass.services.async_call(AUTOMATION_DOMAIN, SERVICE_RELOAD)
+
+                # Resolve entity_id to turn it off and apply the tag
+                ent_reg = er.async_get(hass)
+                reg_entity_id = entity_id or ent_reg.async_get_entity_id(
+                    AUTOMATION_DOMAIN, AUTOMATION_DOMAIN, config_key
+                )
+
+                if reg_entity_id:
+                    # Turn off automation
+                    await hass.services.async_call(
+                        AUTOMATION_DOMAIN,
+                        "turn_off",
+                        {"entity_id": reg_entity_id},
+                    )
+
+                    # Add override tag if configured
+                    if would_be_deleted_tag:
+                        label_reg = lr.async_get(hass)
+                        label = label_reg.async_get_label_by_name(
+                            would_be_deleted_tag
+                        )
+                        if label is None:
+                            try:
+                                label = label_reg.async_create(
+                                    would_be_deleted_tag
+                                )
+                            except ValueError:
+                                label = next(
+                                    (
+                                        l
+                                        for l in label_reg.labels.values()
+                                        if l.name.lower()
+                                        == would_be_deleted_tag.lower()
+                                    ),
+                                    None,
+                                )
+                        if label:
+                            label_id = label.label_id
+                            reg_entry = ent_reg.async_get(reg_entity_id)
+                            if reg_entry:
+                                new_labels = reg_entry.labels | {label_id}
+                                ent_reg.async_update_entity(
+                                    reg_entity_id, labels=new_labels
+                                )
+
+                _LOGGER.info(
+                    "Delete override: Disabled automation '%s' instead of deleting",
+                    config_key,
+                )
+                return {"success": True, "id": config_key}
 
             path = hass.config.path(AUTOMATION_CONFIG_PATH)
             lock = hass.data[DOMAIN]["automation_lock"]
@@ -456,7 +589,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 cv.slug(config_key)
             except vol.Invalid as err:
                 raise ValueError(
-                    f"Script ID '{config_key}' is not a valid slug (use only lowercase letters, numbers, and underscores): {err}"
+                    f"Script ID '{config_key}' is not a valid slug (use only "
+                    f"lowercase letters, numbers, and underscores): {err}"
                 ) from err
 
             config_data = {}
@@ -510,10 +644,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.info("Successfully created/updated script '%s'", config_key)
 
             # Assign tag and expose if configured
-            tag = entry.options.get("tag", "").strip()
+            is_one_shot = on_completion != "persist"
             expose_to_ai = call.data.get("expose_to_ai", False)
             await _async_post_create_processing(
-                hass, SCRIPT_DOMAIN, config_key, tag, expose_to_ai
+                hass,
+                SCRIPT_DOMAIN,
+                config_key,
+                expose_to_ai,
+                is_one_shot=is_one_shot,
             )
 
             return {"success": True, "id": config_key}
@@ -541,6 +679,109 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Verify deletion restriction
             _verify_deletion_restriction(hass, SCRIPT_DOMAIN, config_key)
+
+            disable_instead_of_delete = entry.options.get(
+                "disable_instead_of_delete", False
+            )
+            would_be_deleted_tag = entry.options.get(
+                "would_be_deleted_tag", "would-be-deleted"
+            ).strip()
+
+            if disable_instead_of_delete:
+                path = hass.config.path(SCRIPT_CONFIG_PATH)
+                lock = hass.data[DOMAIN]["script_lock"]
+
+                async with lock:
+                    current = await hass.async_add_executor_job(_read_yaml, path)
+                    if current is None:
+                        current = {}
+                    elif not isinstance(current, dict):
+                        raise ValueError("scripts.yaml is not a dictionary")
+
+                    if config_key not in current:
+                        raise ValueError(f"Script with ID '{config_key}' not found")
+
+                    script_config = current[config_key]
+                    sequence = script_config.get("sequence") or []
+                    if isinstance(sequence, dict):
+                        sequence = [sequence]
+                    elif not isinstance(sequence, list):
+                        sequence = []
+
+                    notification_action = {
+                        "action": "persistent_notification.create",
+                        "data": {
+                            "title": "Disabled Script Called",
+                            "message": (
+                                f"Warning: Disabled script "
+                                f"'{config_key}' was called."
+                            ),
+                        },
+                    }
+                    stop_action = {
+                        "stop": "Disabled by delete override",
+                    }
+
+                    # Check if already modified to prevent double prepend
+                    has_notification = False
+                    if sequence and isinstance(sequence[0], dict):
+                        act_name = sequence[0].get("action")
+                        if act_name == "persistent_notification.create":
+                            has_notification = True
+
+                    if not has_notification:
+                        script_config["sequence"] = [
+                            notification_action,
+                            stop_action,
+                        ] + sequence
+
+                    await hass.async_add_executor_job(_write_yaml, path, current)
+
+                # Reload scripts
+                await hass.services.async_call(SCRIPT_DOMAIN, SERVICE_RELOAD)
+
+                # Resolve entity_id to apply the tag
+                ent_reg = er.async_get(hass)
+                reg_entity_id = entity_id or ent_reg.async_get_entity_id(
+                    SCRIPT_DOMAIN, SCRIPT_DOMAIN, config_key
+                )
+
+                if reg_entity_id:
+                    # Add override tag if configured
+                    if would_be_deleted_tag:
+                        label_reg = lr.async_get(hass)
+                        label = label_reg.async_get_label_by_name(
+                            would_be_deleted_tag
+                        )
+                        if label is None:
+                            try:
+                                label = label_reg.async_create(
+                                    would_be_deleted_tag
+                                )
+                            except ValueError:
+                                label = next(
+                                    (
+                                        l
+                                        for l in label_reg.labels.values()
+                                        if l.name.lower()
+                                        == would_be_deleted_tag.lower()
+                                    ),
+                                    None,
+                                )
+                        if label:
+                            label_id = label.label_id
+                            reg_entry = ent_reg.async_get(reg_entity_id)
+                            if reg_entry:
+                                new_labels = reg_entry.labels | {label_id}
+                                ent_reg.async_update_entity(
+                                    reg_entity_id, labels=new_labels
+                                )
+
+                _LOGGER.info(
+                    "Delete override: Disabled script '%s' instead of deleting",
+                    config_key,
+                )
+                return {"success": True, "id": config_key}
 
             path = hass.config.path(SCRIPT_CONFIG_PATH)
             lock = hass.data[DOMAIN]["script_lock"]

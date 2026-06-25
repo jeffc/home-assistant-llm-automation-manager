@@ -49,9 +49,25 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     default=self.config_entry.options.get("tag", ""),
                 ): str,
                 vol.Optional(
+                    "one_shot_tag",
+                    default=self.config_entry.options.get("one_shot_tag", "one-shot"),
+                ): str,
+                vol.Optional(
                     "restrict_deletion",
                     default=self.config_entry.options.get("restrict_deletion", False),
                 ): bool,
+                vol.Optional(
+                    "disable_instead_of_delete",
+                    default=self.config_entry.options.get(
+                        "disable_instead_of_delete", False
+                    ),
+                ): bool,
+                vol.Optional(
+                    "would_be_deleted_tag",
+                    default=self.config_entry.options.get(
+                        "would_be_deleted_tag", "would-be-deleted"
+                    ),
+                ): str,
                 vol.Optional(
                     "expose_llm_tools",
                     default=self.config_entry.options.get("expose_llm_tools", True),
