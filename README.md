@@ -54,6 +54,19 @@ Click the **Configure** button on the integration card to modify global settings
     to entities when they would have been deleted but are instead disabled.
 6.  **Expose AI LLM Tools**: Enable/disable exposing the creation and deletion actions to voice/LLM
     assistants.
+7.  **Use regular expression rules**: Enable specifying custom regular expression lists to restrict
+    allowed actions on a separate configuration page.
+
+### Regular Expression Action Filtering
+If **Use regular expression rules** is enabled on the main options page, the flow advances to a subpage with two multiline text fields:
+*   **Allowed Action Regexes**: Regular expressions (one per line) specifying allowed actions.
+*   **Denied Action Regexes**: Regular expressions (one per line) specifying blocked actions.
+
+**Resolution Logic:**
+1.  **Only Allowed specified**: Only actions matching one or more allowed regexes are permitted.
+2.  **Only Denied specified**: All actions are permitted except those matching one or more denied regexes.
+3.  **Both specified**: Denied list is checked first (matching blocks the action). If not denied, it must match one or more allowed regexes to be permitted; otherwise, it is blocked.
+4.  **Wildcard matching**: Adding a wildcard (`.*`) to the end of the allowlist will allow any action except those explicitly matched on the denylist.
 
 ---
 
@@ -136,4 +149,42 @@ Deletes a script. Either `id` or `entity_id` is required.
 action: automation_script_manager.delete_script
 data:
   entity_id: script.self_destructing_script
+```
+
+### `automation_script_manager.get_allowed_actions`
+Retrieves a list of all registered Home Assistant actions (services) and whether they are allowed or blocked by the configured security policies (including mode, domains, action overrides, and regex rules).
+
+This service returns a response and can be executed from the **Developer Tools -> Actions (Services)** tab.
+
+**Parameters:**
+- `verbose` (Optional): A boolean that, when set to `true`, returns detailed information about why each action is allowed or blocked (which policy or matching regex/list was used). Defaults to `false`.
+
+**Example Response (Default, Non-Verbose):**
+```yaml
+allowed:
+  light:
+    - turn_on
+    - turn_off
+  switch:
+    - turn_on
+blocked:
+  lock:
+    - unlock
+  climate:
+    - set_temperature
+```
+
+**Example Response (Verbose):**
+```yaml
+allowed:
+  light:
+    turn_on: "Allowed by default (global mode: allow_all)"
+    turn_off: "Allowed by default (global mode: allow_all)"
+  switch:
+    turn_on: "Allowed by default (global mode: allow_all)"
+blocked:
+  lock:
+    unlock: "Blocked by default fallback (global mode: expose_only_these)"
+  climate:
+    set_temperature: "Blocked by default fallback (global mode: expose_only_these)"
 ```

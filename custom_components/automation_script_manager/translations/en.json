@@ -21,7 +21,9 @@
           "restrict_deletion": "Restrict deletion to tagged entities only",
           "disable_instead_of_delete": "Disable instead of delete",
           "would_be_deleted_tag": "Disable Override Tag (Label)",
-          "expose_llm_tools": "Expose AI LLM Tools"
+          "expose_llm_tools": "Expose AI LLM Tools",
+          "expose_actions_mode": "Allowed Actions Mode",
+          "use_regex_rules": "Use regular expression rules"
         },
         "data_description": {
           "tag": "The tag (label name) to assign automatically to all created automations/scripts. If the label doesn't exist, it will be registered in Home Assistant.",
@@ -29,7 +31,29 @@
           "restrict_deletion": "If enabled, delete actions will fail for any automation or script that does not have the specified tag.",
           "disable_instead_of_delete": "If enabled, automations and scripts that would be deleted (either via service call or self-destruct completion action) are disabled/modified to prevent execution rather than removed.",
           "would_be_deleted_tag": "The tag (label name) to assign specifically to entities that have been disabled instead of deleted.",
-          "expose_llm_tools": "Expose the creation and deletion actions as tools to conversation LLM agents."
+          "expose_llm_tools": "Expose the creation and deletion actions as tools to conversation LLM agents.",
+          "expose_actions_mode": "Define the global policy for LLM service action execution (Allow All, Allow All Except, or Allow Only).",
+          "use_regex_rules": "If enabled, redirects to a page where you can enter regular expressions to allow or deny actions."
+        }
+      },
+      "domains": {
+        "title": "Configure Domain Permissions",
+        "description": "Select the policy for each service domain. Unconfigured domains will follow the global choice."
+      },
+      "actions": {
+        "title": "Configure Action Permissions",
+        "description": "Select the policy for individual actions within your 'Choose per-action' domains."
+      },
+      "regex": {
+        "title": "Configure Regular Expression Rules",
+        "description": "Enter regular expressions (one per line) to allow or block service actions (e.g. 'light\\\\..*').",
+        "data": {
+          "allow_regexes": "Allowed Action Regexes",
+          "disallow_regexes": "Denied Action Regexes"
+        },
+        "data_description": {
+          "allow_regexes": "List of regular expressions (one per line) that allow actions matching them. Leave blank if not using allow rules.",
+          "disallow_regexes": "List of regular expressions (one per line) that block actions matching them. Checked before the allowlist."
         }
       }
     }

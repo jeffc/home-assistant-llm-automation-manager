@@ -98,6 +98,12 @@ DELETE_SCRIPT_SCHEMA = vol.Schema(
         vol.Optional("entity_id"): cv.entity_id,
     }
 )
+GET_ALLOWED_ACTIONS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("verbose", default=False): cv.boolean,
+    }
+)
+
 
 def _parse_json_fallback(value: Any) -> Any:
     """Parse JSON/Python string if value is wrapped in a dict or is a string itself."""
@@ -170,6 +176,177 @@ def _extract_actions(data: Any) -> set[str]:
         for item in data:
             actions.update(_extract_actions(item))
     return actions
+
+
+def is_action_allowed_by_regex(
+    action: str, allow_regexes_str: str, disallow_regexes_str: str
+) -> bool:
+    """Check action name against allow/deny lists using regular expressions."""
+    import re
+
+    allow_lines = [
+        line.strip()
+        for line in allow_regexes_str.splitlines()
+        if line.strip()
+    ]
+    disallow_lines = [
+        line.strip()
+        for line in disallow_regexes_str.splitlines()
+        if line.strip()
+    ]
+
+    has_allow = len(allow_lines) > 0
+    has_disallow = len(disallow_lines) > 0
+
+    def matches_any(patterns: list[str]) -> bool:
+        for pat in patterns:
+            try:
+                if re.search(pat, action):
+                    return True
+            except re.error:
+                pass
+        return False
+
+    if has_allow and not has_disallow:
+        return matches_any(allow_lines)
+
+    if has_disallow and not has_allow:
+        return not matches_any(disallow_lines)
+
+    if has_allow and has_disallow:
+        if matches_any(disallow_lines):
+            return False
+        return matches_any(allow_lines)
+
+    return True
+
+
+def is_action_allowed_by_regex_with_reason(
+    action: str, allow_regexes_str: str, disallow_regexes_str: str
+) -> tuple[bool, str]:
+    """Check action name against regex allow/deny lists and return reason."""
+    import re
+
+    allow_lines = [
+        line.strip()
+        for line in allow_regexes_str.splitlines()
+        if line.strip()
+    ]
+    disallow_lines = [
+        line.strip()
+        for line in disallow_regexes_str.splitlines()
+        if line.strip()
+    ]
+
+    has_allow = len(allow_lines) > 0
+    has_disallow = len(disallow_lines) > 0
+
+    def find_matching_pattern(patterns: list[str]) -> str | None:
+        for pat in patterns:
+            try:
+                if re.search(pat, action):
+                    return pat
+            except re.error:
+                pass
+        return None
+
+    if has_allow and not has_disallow:
+        match = find_matching_pattern(allow_lines)
+        if match:
+            return True, f"Allowed by regex allowlist (matched '{match}')"
+        return (
+            False,
+            "Blocked because it did not match any pattern in the regex allowlist",
+        )
+
+    if has_disallow and not has_allow:
+        match = find_matching_pattern(disallow_lines)
+        if match:
+            return False, f"Blocked by regex denylist (matched '{match}')"
+        return (
+            True,
+            "Allowed because it did not match any pattern in the regex denylist",
+        )
+
+    if has_allow and has_disallow:
+        match_deny = find_matching_pattern(disallow_lines)
+        if match_deny:
+            return False, f"Blocked by regex denylist (matched '{match_deny}')"
+        match_allow = find_matching_pattern(allow_lines)
+        if match_allow:
+            return True, f"Allowed by regex allowlist (matched '{match_allow}')"
+        return (
+            False,
+            "Blocked because it did not match any pattern in either regex list",
+        )
+
+    return True, "Allowed by default (no regex lists specified)"
+
+
+def is_action_allowed_with_reason(
+    domain: str, service: str, options: dict[str, Any]
+) -> tuple[bool, str]:
+    """Resolve allowed/denied action and return the reason."""
+    action = f"{domain}.{service}"
+
+    # 1. Regex check
+    if options.get("use_regex_rules", False):
+        allow_regexes = options.get("allow_regexes", "")
+        disallow_regexes = options.get("disallow_regexes", "")
+        has_regex_rules = bool(
+            allow_regexes.strip() or disallow_regexes.strip()
+        )
+        allowed_by_regex, reason = is_action_allowed_by_regex_with_reason(
+            action, allow_regexes, disallow_regexes
+        )
+        if has_regex_rules:
+            return allowed_by_regex, reason
+        if not allowed_by_regex:
+            return False, reason
+
+    # 2. Hierarchical domain/action check
+    mode = options.get("expose_actions_mode", "allow_all")
+    if mode == "allow_all":
+        return True, "Allowed by default (global mode: allow_all)"
+
+    # 1. Check domain configuration
+    domain_choice = options.get(f"domain_config_{domain}", "global")
+
+    if domain_choice == "per_action":
+        # 2. Check individual action configuration
+        action_choice = options.get(
+            f"action_config_{domain}_{service}", "global"
+        )
+        if action_choice == "allow":
+            return (
+                True,
+                f"Allowed by action config 'action_config_{domain}_{service}'",
+            )
+        if action_choice == "deny":
+            return (
+                False,
+                f"Blocked by action config 'action_config_{domain}_{service}'",
+            )
+
+    elif domain_choice == "allow":
+        return True, f"Allowed by domain config 'domain_config_{domain}'"
+    elif domain_choice == "deny":
+        return False, f"Blocked by domain config 'domain_config_{domain}'"
+
+    # 3. Fall back to global mode logic
+    # "Allow All Except Selected" (expose_all_except) -> default is allowed (True)
+    # "Allow Only Selected" (expose_only_these) -> default is blocked (False)
+    if mode == "expose_all_except":
+        return True, f"Allowed by default fallback (global mode: {mode})"
+    return False, f"Blocked by default fallback (global mode: {mode})"
+
+
+def is_action_allowed(
+    domain: str, service: str, options: dict[str, Any]
+) -> bool:
+    """Resolve allowed/denied action based on config options."""
+    allowed, _ = is_action_allowed_with_reason(domain, service, options)
+    return allowed
 
 
 def _read_yaml(path: str) -> Any:
@@ -419,6 +596,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Extract and validate all action names referenced
             actions_list = _extract_actions(config_data)
             domain_services = hass.services.async_services()
+
+            entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
+            options = entry.options if entry else {}
+
             for act in actions_list:
                 if "." not in act:
                     raise ValueError(
@@ -431,6 +612,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 ):
                     raise ValueError(
                         f"Action '{act}' is not registered in Home Assistant"
+                    )
+                if not is_action_allowed(domain, service, options):
+                    raise ValueError(
+                        f"Action '{act}' is blocked by security policy"
                     )
 
             # Validate the configuration
@@ -740,6 +925,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Extract and validate all action names referenced
             actions_list = _extract_actions(config_data)
             domain_services = hass.services.async_services()
+
+            entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
+            options = entry.options if entry else {}
+
             for act in actions_list:
                 if "." not in act:
                     raise ValueError(
@@ -752,6 +941,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 ):
                     raise ValueError(
                         f"Action '{act}' is not registered in Home Assistant"
+                    )
+                if not is_action_allowed(domain, service, options):
+                    raise ValueError(
+                        f"Action '{act}' is blocked by security policy"
                     )
 
             # Validate the configuration
@@ -984,6 +1177,44 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.OPTIONAL,
     )
 
+    async def async_get_allowed_actions(call: ServiceCall) -> ServiceResponse:
+        """Retrieve allowed and blocked actions."""
+        domain_services = hass.services.async_services()
+        verbose = call.data.get("verbose", False)
+
+        allowed = {}
+        blocked = {}
+
+        for dom, svcs in sorted(domain_services.items()):
+            for svc in sorted(svcs.keys()):
+                is_allowed, reason = is_action_allowed_with_reason(
+                    dom, svc, entry.options
+                )
+                if is_allowed:
+                    if dom not in allowed:
+                        allowed[dom] = {} if verbose else []
+                    if verbose:
+                        allowed[dom][svc] = reason
+                    else:
+                        allowed[dom].append(svc)
+                else:
+                    if dom not in blocked:
+                        blocked[dom] = {} if verbose else []
+                    if verbose:
+                        blocked[dom][svc] = reason
+                    else:
+                        blocked[dom].append(svc)
+
+        return {"allowed": allowed, "blocked": blocked}
+
+    hass.services.async_register(
+        DOMAIN,
+        "get_allowed_actions",
+        async_get_allowed_actions,
+        schema=GET_ALLOWED_ACTIONS_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
     # Setup intents for LLM tools conditionally
     expose_llm_tools = entry.options.get("expose_llm_tools", True)
     if expose_llm_tools:
@@ -1001,7 +1232,13 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    for service in ("create_automation", "delete_automation", "create_script", "delete_script"):
+    for service in (
+        "create_automation",
+        "delete_automation",
+        "create_script",
+        "delete_script",
+        "get_allowed_actions",
+    ):
         hass.services.async_remove(DOMAIN, service)
 
     # Unregister intents

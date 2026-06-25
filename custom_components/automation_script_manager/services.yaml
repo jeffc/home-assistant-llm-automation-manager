@@ -197,3 +197,14 @@ delete_script:
       selector:
         entity:
           domain: script
+
+get_allowed_actions:
+  name: Get Allowed Actions
+  description: Retrieve a list of all registered Home Assistant actions and whether they are allowed or blocked by the security policy.
+  fields:
+    verbose:
+      name: Verbose
+      description: If true, returns detailed information about why each action is allowed or blocked.
+      default: false
+      selector:
+        boolean:

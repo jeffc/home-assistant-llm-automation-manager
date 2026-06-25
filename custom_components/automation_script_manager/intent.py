@@ -424,9 +424,15 @@ class EnumerateActionsIntent(intent.IntentHandler):
         from homeassistant.helpers.service import async_get_all_descriptions
         descriptions = await async_get_all_descriptions(hass)
 
+        entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
+        options = entry.options if entry else {}
+
         lines = []
         for domain, services in sorted(descriptions.items()):
             for service_name, service_info in sorted(services.items()):
+                from . import is_action_allowed
+                if not is_action_allowed(domain, service_name, options):
+                    continue
                 desc = service_info.get("description", "No description available.")
                 lines.append(f"- {domain}.{service_name}: {desc}")
 
