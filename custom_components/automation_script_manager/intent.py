@@ -64,6 +64,21 @@ You MUST NOT manually include any self-disable or self-delete action (such as ca
 automation itself) inside the action list. Doing so will fail validation because the
 automation entity does not exist in Home Assistant yet when the tool is called.
 
+CONDITIONS VS IF-THEN BLOCKS IN ONE-SHOTS:
+For persistent automations ('on_completion': 'persist'), top-level 'condition' blocks are
+perfectly fine. However, for one-shot automations ('on_completion': 'delete_self' or
+'disable_self'), you must think critically:
+- Use a top-level 'condition' block if the automation must stick around checking
+  the condition on every trigger until it finally runs the actions once (e.g. "turn off heater
+  when temperature is reported, if temp is > 75"). The automation will not self-destruct
+  until the condition is satisfied and the actions run.
+- Use an 'if-then' conditional action block (an action with 'if' and 'then' keys) if the
+  automation must trigger exactly once and clean itself up immediately, regardless of
+  whether the condition was met and the actions ran (e.g. "send notification at 10 PM
+  if the door is open, then self-destruct").
+If there is any uncertainty about this choice, you must explicitly mention which of these
+two options you chose in your final response to the user.
+
 IMPORTANT: Triggers, conditions, and actions must be valid Home Assistant structures.
 
 EXAMPLES OF VALID TRIGGERS:

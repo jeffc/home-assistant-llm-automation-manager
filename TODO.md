@@ -35,7 +35,7 @@
 - [x] **Robust Automation/Script Action & Trigger Validation**
   - Added checks to prevent creating/updating automations/scripts without actions or triggers. This prevents LLMs from creating empty entities that only self-destruct/disable.
 
-- [ ] **One-Shot Conditional Block Prompting ("do X when Y if Z")**
+- [x] **One-Shot Conditional Block Prompting ("do X when Y if Z")**
   - Update the description of `CreateAutomationIntent` in `intent.py` to instruct the LLM:
     - When creating a temporary/one-shot automation with a condition (e.g., "do X when Y if Z"), it should place the condition inside a conditional action block (`if`-`then` inside the action list) instead of using a top-level `condition`.
     - This ensures the automation triggers and always executes the self-destruct/disable completion action regardless of whether the condition is true or false.
