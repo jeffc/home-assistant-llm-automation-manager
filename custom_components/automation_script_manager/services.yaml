@@ -208,3 +208,24 @@ get_allowed_actions:
       default: false
       selector:
         boolean:
+
+get_entity_traces:
+  name: Get Entity Traces
+  description: Retrieve recent execution runs and detailed step traces for a specific automation or script entity.
+  fields:
+    entity_id:
+      name: Entity ID
+      description: The entity ID of the automation or script (e.g. automation.my_automation or script.my_script).
+      example: automation.my_automation
+      required: true
+      selector:
+        entity:
+          domain:
+            - automation
+            - script
+    run_id:
+      name: Run ID
+      description: The optional execution Run ID. If omitted, defaults to the most recent run.
+      example: 1234567890abcdef
+      selector:
+        text:

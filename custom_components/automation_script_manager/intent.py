@@ -618,6 +618,96 @@ class GetActionDetailsIntent(intent.IntentHandler):
         return response
 
 
+class GetEntityTracesIntent(intent.IntentHandler):
+    """Handle GetEntityTraces intent."""
+
+    intent_type = "GetEntityTraces"
+    description = (
+        "Get execution traces and recent run details for a specific "
+        "automation or script entity. Only exposed entities are allowed."
+    )
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
+
+    @property
+    def slot_schema(self) -> dict | None:
+        """Return slot schema."""
+        return {
+            vol.Required("entity_id"): cv.entity_id,
+            vol.Optional("run_id"): cv.string,
+        }
+
+    async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
+        """Handle the intent."""
+        hass = intent_obj.hass
+        slots = intent_obj.slots
+
+        entity_id = slots["entity_id"]["value"].strip()
+        run_id = slots["run_id"]["value"].strip() if "run_id" in slots else None
+
+        response = intent_obj.create_response()
+
+        # Enforce exposed-only restriction for conversation/LLM
+        from homeassistant.components.homeassistant.exposed_entities import (
+            async_should_expose,
+        )
+        if not async_should_expose(hass, "conversation", entity_id):
+            response.async_set_speech(
+                f"Entity '{entity_id}' is not exposed to the AI assistant. "
+                "You cannot query its execution traces."
+            )
+            return response
+
+        from . import async_fetch_entity_traces
+        try:
+            traces_data = await async_fetch_entity_traces(hass, entity_id, run_id)
+        except Exception as err:
+            response.async_set_speech(
+                f"Failed to fetch execution traces for '{entity_id}': {err}"
+            )
+            return response
+
+        recent_runs = traces_data.get("recent_runs", [])
+        detailed_run = traces_data.get("detailed_run")
+
+        speech_parts = [f"Execution traces for {entity_id}:"]
+
+        if recent_runs:
+            speech_parts.append("\nRecent runs (up to 5):")
+            for r in recent_runs:
+                err_str = f" (Error: {r['error']})" if r.get("error") else ""
+                speech_parts.append(
+                    f"- Run ID: {r['run_id']} | State: {r['state']} | "
+                    f"Start Time: {r['start_time']}{err_str}"
+                )
+        else:
+            speech_parts.append("\nNo recent runs found.")
+
+        if detailed_run:
+            speech_parts.append(
+                f"\nDetailed steps for Run ID {detailed_run['run_id']}:"
+            )
+            steps = detailed_run.get("steps", [])
+            if steps:
+                for step in steps:
+                    step_err = f" | Error: {step['error']}" if step.get("error") else ""
+                    step_res = f" | Result: {step['result']}" if step.get("result") else ""
+                    speech_parts.append(
+                        f"- Path: {step['path']} | "
+                        f"Timestamp: {step['timestamp']}{step_err}{step_res}"
+                    )
+            else:
+                speech_parts.append("No detailed steps recorded for this run.")
+        elif run_id:
+            speech_parts.append(f"\nDetailed steps for Run ID '{run_id}' not found.")
+
+        response.async_set_speech("\n".join(speech_parts))
+        return response
+
+
 async def async_setup_intents(hass: HomeAssistant) -> None:
     """Register intents with the Home Assistant intent system."""
     intent.async_register(hass, CreateAutomationIntent(hass))
@@ -627,3 +717,4 @@ async def async_setup_intents(hass: HomeAssistant) -> None:
     intent.async_register(hass, GetExposedNotifyEntitiesIntent(hass))
     intent.async_register(hass, EnumerateActionsIntent(hass))
     intent.async_register(hass, GetActionDetailsIntent(hass))
+    intent.async_register(hass, GetEntityTracesIntent(hass))

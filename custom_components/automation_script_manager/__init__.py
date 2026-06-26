@@ -104,6 +104,13 @@ GET_ALLOWED_ACTIONS_SCHEMA = vol.Schema(
     }
 )
 
+GET_ENTITY_TRACES_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_id,
+        vol.Optional("run_id"): cv.string,
+    }
+)
+
 
 def _parse_json_fallback(value: Any) -> Any:
     """Parse JSON/Python string if value is wrapped in a dict or is a string itself."""
@@ -334,6 +341,153 @@ def is_action_allowed(
     """Resolve allowed/denied action based on config options."""
     allowed, _ = is_action_allowed_with_reason(domain, service, options)
     return allowed
+
+
+async def async_fetch_entity_traces(
+    hass: HomeAssistant, entity_id: str, run_id: str | None = None
+) -> dict[str, Any]:
+    """Fetch trace history and detailed trace steps for an automation/script."""
+    if "." not in entity_id:
+        raise HomeAssistantError(f"Invalid entity ID '{entity_id}'")
+
+    domain, _ = entity_id.split(".", 1)
+    if domain not in ("automation", "script"):
+        raise HomeAssistantError(
+            f"Entity domain '{domain}' is not supported for tracing. "
+            "Only 'automation' and 'script' are supported."
+        )
+
+    # Check if trace component is active
+    from homeassistant.components.trace import DATA_TRACE
+    if DATA_TRACE not in hass.data:
+        raise HomeAssistantError("Trace component is not active or loaded")
+
+    from homeassistant.components.trace.websocket_api import (
+        async_list_traces,
+        async_get_trace,
+    )
+    import datetime
+
+    # Fetch traces list
+    try:
+        traces = await async_list_traces(hass, domain, entity_id)
+    except Exception as err:
+        raise HomeAssistantError(
+            f"Failed to list traces for {entity_id}: {err}"
+        ) from err
+
+    # Sort traces descending by start timestamp (newest first)
+    def get_start_time(t: dict[str, Any]) -> datetime.datetime:
+        ts = t.get("timestamp", {})
+        dt = ts.get("start") if ts else None
+        if isinstance(dt, datetime.datetime):
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=datetime.timezone.utc)
+            return dt
+        return datetime.datetime(1, 1, 1, tzinfo=datetime.timezone.utc)
+
+    traces.sort(key=get_start_time, reverse=True)
+
+    # 5 most recent runs
+    recent_runs = []
+    for t in traces[:5]:
+        start_time = None
+        ts = t.get("timestamp", {})
+        if ts and ts.get("start"):
+            dt = ts["start"]
+            if hasattr(dt, "isoformat"):
+                start_time = dt.isoformat()
+            else:
+                start_time = str(dt)
+        recent_runs.append({
+            "run_id": t.get("run_id"),
+            "state": t.get("state"),
+            "start_time": start_time,
+            "error": t.get("error"),
+        })
+
+    # Find detailed run
+    detailed_run_data = None
+    selected_run_id = run_id
+    if not selected_run_id and traces:
+        selected_run_id = traces[0].get("run_id")
+
+    if selected_run_id:
+        try:
+            detailed_run_data = await async_get_trace(
+                hass, entity_id, selected_run_id
+            )
+        except KeyError:
+            pass
+        except Exception as err:
+            _LOGGER.warning(
+                "Error getting detailed trace for %s and run_id %s: %s",
+                entity_id,
+                selected_run_id,
+                err,
+            )
+
+    steps = []
+    config = None
+    blueprint_inputs = None
+    if detailed_run_data:
+        config = detailed_run_data.get("config")
+        blueprint_inputs = detailed_run_data.get("blueprint_inputs")
+
+        raw_trace_steps = detailed_run_data.get("trace", {})
+        for path_key, trace_list in raw_trace_steps.items():
+            for item in trace_list:
+                t_val = item.get("timestamp")
+                timestamp_str = None
+                if t_val:
+                    if hasattr(t_val, "isoformat"):
+                        timestamp_str = t_val.isoformat()
+                    else:
+                        timestamp_str = str(t_val)
+
+                step_info = {
+                    "path": item.get("path"),
+                    "timestamp": timestamp_str,
+                }
+                if item.get("changed_variables"):
+                    step_info["changed_variables"] = item["changed_variables"]
+                if item.get("error"):
+                    step_info["error"] = item["error"]
+                if item.get("template_errors"):
+                    step_info["template_errors"] = item["template_errors"]
+                if item.get("result"):
+                    step_info["result"] = item["result"]
+
+                # Sort key helper
+                def get_t_val(val: Any) -> datetime.datetime:
+                    if isinstance(val, datetime.datetime):
+                        if val.tzinfo is None:
+                            return val.replace(tzinfo=datetime.timezone.utc)
+                        return val
+                    return datetime.datetime(
+                        1, 1, 1, tzinfo=datetime.timezone.utc
+                    )
+
+                steps.append((get_t_val(t_val), step_info))
+
+        steps.sort(key=lambda x: x[0])
+        steps = [x[1] for x in steps]
+
+    detailed_run = None
+    if selected_run_id:
+        detailed_run = {
+            "run_id": selected_run_id,
+            "steps": steps,
+        }
+        if config:
+            detailed_run["config"] = config
+        if blueprint_inputs:
+            detailed_run["blueprint_inputs"] = blueprint_inputs
+
+    return {
+        "recent_runs": recent_runs,
+        "detailed_run": detailed_run,
+    }
 
 
 def _read_yaml(path: str) -> Any:
@@ -1202,6 +1356,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.ONLY,
     )
 
+    async def async_get_entity_traces(call: ServiceCall) -> ServiceResponse:
+        """Fetch trace history and logs for a specific automation/script."""
+        entity_id = call.data["entity_id"]
+        run_id = call.data.get("run_id")
+        try:
+            return await async_fetch_entity_traces(hass, entity_id, run_id)
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Failed to fetch traces: {err}"
+            ) from err
+
+    hass.services.async_register(
+        DOMAIN,
+        "get_entity_traces",
+        async_get_entity_traces,
+        schema=GET_ENTITY_TRACES_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
     # Setup intents for LLM tools conditionally
     expose_llm_tools = entry.options.get("expose_llm_tools", True)
     if expose_llm_tools:
@@ -1225,12 +1398,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "create_script",
         "delete_script",
         "get_allowed_actions",
+        "get_entity_traces",
     ):
         hass.services.async_remove(DOMAIN, service)
 
     # Unregister intents
     from homeassistant.helpers import intent
-    for intent_type in ("CreateAutomation", "DeleteAutomation", "CreateScript", "DeleteScript"):
+    for intent_type in (
+        "CreateAutomation",
+        "DeleteAutomation",
+        "CreateScript",
+        "DeleteScript",
+        "GetEntityTraces",
+    ):
         try:
             intent.async_remove(hass, intent_type)
         except HomeAssistantError:

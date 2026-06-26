@@ -270,3 +270,17 @@ blocked:
   climate:
     set_temperature: "Blocked because it did not match any pattern in the regex allowlist"
 ```
+
+### `automation_script_manager.get_entity_traces`
+Retrieves recent execution runs and detailed step traces for a specific automation or script entity. Unlike the LLM intent, this user-callable action has no exposure restrictions and can query traces for any automation or script.
+
+**Parameters:**
+- `entity_id` (Required): The entity ID of the automation or script (e.g. `automation.my_automation` or `script.my_script`).
+- `run_id` (Optional): The optional execution Run ID. If omitted, defaults to the most recent run.
+
+---
+
+## Conversation AI Intents (LLM Tools)
+The integration automatically registers custom intents that are exposed as tools to conversation agents:
+- **`GetEntityTraces`**: Allows the LLM to get execution traces and recent run details for a specific automation or script entity.
+  *   **Restriction**: To preserve user privacy and security, this intent enforces that the target entity **must be exposed** to the conversation assistant (i.e. `async_should_expose(hass, "conversation", entity_id)` must be true). If the entity is not exposed, the tool call returns an error.

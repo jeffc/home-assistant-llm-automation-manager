@@ -40,8 +40,7 @@
     - When creating a temporary/one-shot automation with a condition (e.g., "do X when Y if Z"), it should place the condition inside a conditional action block (`if`-`then` inside the action list) instead of using a top-level `condition`.
     - This ensures the automation triggers and always executes the self-destruct/disable completion action regardless of whether the condition is true or false.
 
-- [ ] **Managed Entity Diagnostics (`GetManagedEntityErrors`)**
-  - Implement an intent handler to retrieve recent runtime errors or execution traces for entities created by this integration.
-  - Track created entities using an independent local JSON datastore/log (e.g., via Home Assistant's `Store` class in `.storage/`) rather than relying purely on tags, which the user might not have configured.
-  - Explore setting metadata on entities (e.g., prefixing unique IDs in YAML with `asm_` or using entity registry options) to identify integration-created entities.
-  - Helps LLM agents diagnose post-creation runtime failures.
+- [x] **Entity Diagnostics & Tracing (`GetEntityTraces`)**
+  - Implement an intent handler and service (`get_entity_traces`) to retrieve recent execution traces and step-by-step debug logs for any automation or script.
+  - Enforce that the conversation agent (LLM) can only access traces for entities that are exposed to it.
+  - Allow the user-callable action to run without the exposed-only restriction.
