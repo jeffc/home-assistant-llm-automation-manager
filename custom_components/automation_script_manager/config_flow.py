@@ -10,6 +10,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
 
@@ -114,12 +115,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     default=self._options_data.get(
                         "tag", "CREATED_WITH_AUTOMATION"
                     ),
-                ): str,
+                ): vol.All(cv.string, vol.Match(r"^[a-zA-Z0-9_\-\s]*$")),
                 # Tag (label) auto-assigned to temporary/one-shot entities.
                 vol.Optional(
                     "one_shot_tag",
                     default=self._options_data.get("one_shot_tag", "one-shot"),
-                ): str,
+                ): vol.All(cv.string, vol.Match(r"^[a-zA-Z0-9_\-\s]*$")),
                 # Expose creation/deletion actions as intent tools to Assist/LLM.
                 vol.Optional(
                     "expose_llm_tools",
@@ -167,7 +168,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     default=self._options_data.get(
                         "would_be_deleted_tag", "would-be-deleted"
                     ),
-                ): str,
+                ): vol.All(cv.string, vol.Match(r"^[a-zA-Z0-9_\-\s]*$")),
             }
         )
 

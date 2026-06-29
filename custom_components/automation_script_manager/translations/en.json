@@ -28,8 +28,8 @@
           "would_be_deleted_tag": "Disable Override Tag (Label)"
         },
         "data_description": {
-          "tag": "The tag (label name) to assign automatically to all created automations/scripts. If the label doesn't exist, it will be registered in Home Assistant.",
-          "one_shot_tag": "A second tag (label name) to assign specifically to temporary/one-shot entities (i.e. those with a self-destruct completion action), in addition to the global entity tag.",
+          "tag": "The tag (label name) to assign automatically to all created automations/scripts. If the label doesn't exist, it will be registered in Home Assistant. (Only alphanumeric characters, spaces, hyphens, and underscores are allowed.)",
+          "one_shot_tag": "A second tag (label name) to assign specifically to temporary/one-shot entities (i.e. those with a self-destruct completion action), in addition to the global entity tag. (Only alphanumeric characters, spaces, hyphens, and underscores are allowed.)",
           "expose_llm_tools": "Expose the creation and deletion actions as tools to conversation LLM agents.",
           "let_llm_assign_icon": "If enabled, the AI assistant will be allowed to choose custom icons for created/updated entities and will be equipped with the GetCommonIcons search tool.",
           "prompt_one_time_vs_recurring": "If enabled, the LLM will be explicitly instructed to state in its speech response whether the generated automation is one-time or recurring.",
@@ -37,7 +37,7 @@
           "categorize_mode": "Choose how to handle categorization of generated entities: 'Leave uncategorized', 'Put in specified category' (requires next step to pick categories), or 'Auto-categorize' (requires next step for fallback logic). If no categories exist in Home Assistant, only 'Leave uncategorized' will be available.",
           "restrict_deletion": "If enabled, delete actions will fail for any automation or script that does not have the specified tag.",
           "disable_instead_of_delete": "If enabled, automations and scripts that would be deleted (either via service call or self-destruct completion action) are disabled/modified to prevent execution rather than removed.",
-          "would_be_deleted_tag": "The tag (label name) to assign specifically to entities that have been disabled instead of deleted."
+          "would_be_deleted_tag": "The tag (label name) to assign specifically to entities that have been disabled instead of deleted. (Only alphanumeric characters, spaces, hyphens, and underscores are allowed.)"
         }
       },
       "category_specified": {
