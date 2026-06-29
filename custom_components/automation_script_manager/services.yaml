@@ -277,13 +277,19 @@ render_template:
       selector:
         object:
 
-enumerate_icons:
-  name: Enumerate Icons
-  description: Enumerate or search common home automation icons.
+get_common_icons:
+  name: Get Common Icons
+  description: Search common/active icons or validate any Material Design Icon (MDI) used in Home Assistant.
   fields:
     search_term:
       name: Search Term
       description: Search term to filter icon name, category, or description.
+      required: false
+      selector:
+        text:
+    icon_to_validate:
+      name: Icon to Validate
+      description: A specific icon name (e.g. mdi:lightbulb) to check if it exists in Home Assistant.
       required: false
       selector:
         text:

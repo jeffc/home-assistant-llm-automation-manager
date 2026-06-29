@@ -61,22 +61,24 @@ Click the **Configure** button on the integration card to modify global settings
     to entities when they would have been deleted but are instead disabled.
 6.  **Expose AI LLM Tools**: Enable/disable exposing the creation and deletion actions to voice/LLM
     assistants.
-7.  **Prompt LLM to be explicit about one-time vs recurring**: If enabled, the LLM will be explicitly
+7.  **Let LLM assign icons**: If enabled, the AI assistant will be allowed to choose custom icons for
+    created/updated entities and will be equipped with the `GetCommonIcons` search tool.
+8.  **Prompt LLM to be explicit about one-time vs recurring**: If enabled, the LLM will be explicitly
     instructed in the tool description to state in its response whether the generated automation is
     one-time or recurring. (Note that the guidance to ask the user if it is not clear remains active
     regardless of this setting).
-8.  **Categorize Mode**: Specifies how to categorize generated scripts and automations:
+9.  **Categorize Mode**: Specifies how to categorize generated scripts and automations:
     - `Leave uncategorized`: Does not assign any category.
     - `Put in specified category`: Automatically assigns a preselected category for all automations and scripts.
     - `Auto-categorize`: Instructs the LLM to inspect existing categories, choose the most relevant one, and assign it to the entity.
-9.  **Specified Automation Category**: The category to assign to generated automations (used when "Put in specified category" is selected).
-10. **Specified Script Category**: The category to assign to generated scripts (used when "Put in specified category" is selected).
-11. **Always assign a category**: When using `Auto-categorize`, if this is enabled, the LLM must choose a category even if there isn't a strong match. If disabled, it can leave the entity uncategorized.
-12. **Allowed Action Regexes**: Regular expressions (one per line) specifying allowed actions.
+10. **Specified Automation Category**: The category to assign to generated automations (used when "Put in specified category" is selected).
+11. **Specified Script Category**: The category to assign to generated scripts (used when "Put in specified category" is selected).
+12. **Always assign a category**: When using `Auto-categorize`, if this is enabled, the LLM must choose a category even if there isn't a strong match. If disabled, it can leave the entity uncategorized.
+13. **Allowed Action Regexes**: Regular expressions (one per line) specifying allowed actions.
     Leave empty to default to allowing all actions.
-13. **Denied Action Regexes**: Regular expressions (one per line) specifying blocked actions.
+14. **Denied Action Regexes**: Regular expressions (one per line) specifying blocked actions.
     Checked before the allowlist.
-14. **LLM Generation Debug Mode**: Enable debug mode to allow LLM intent handlers to accept an
+15. **LLM Generation Debug Mode**: Enable debug mode to allow LLM intent handlers to accept an
     optional reasoning parameter, log it to `home-assistant.log`, include it in the description of
     the generated entity, and return it. Note that the "reasoning" slot (along with all other tool
     call outputs) can also be found in the standard Home Assistant "debug conversation" view.
@@ -303,11 +305,12 @@ Evaluates (renders) a Jinja2 template with optional variables and returns the re
 - `template` (Required): The Jinja2 template string to render.
 - `variables` (Optional): A dictionary of variables to pass into the template context.
 
-### `automation_script_manager.enumerate_icons`
-Enumerate or search common Material Design Icons (MDI) used in Home Assistant.
+### `automation_script_manager.get_common_icons`
+Search common icons, active server icons, or validate any Material Design Icon (MDI) used in Home Assistant.
 
 **Parameters:**
-- `search_term` (Optional): A search term to filter icon name, category, or description.
+- `search_term` (Optional): A search term to filter icon name, category, or description within the common/active icons list.
+- `icon_to_validate` (Optional): A specific icon name (e.g. `mdi:lightbulb`) to check if it exists in Home Assistant's full MDI database.
 
 ---
 
@@ -317,4 +320,4 @@ The integration automatically registers custom intents that are exposed as tools
   *   **Restriction**: To preserve user privacy and security, this intent enforces that the target entity **must be exposed** to the conversation assistant (i.e. `async_should_expose(hass, "conversation", entity_id)` must be true). If the entity is not exposed, the tool call returns an error.
 - **`GetTemplateHelperDocs`**: Allows the LLM to search or inspect the available Jinja2 template helper functions, filters, and tests registered in Home Assistant to aid in template generation.
 - **`RenderTemplate`**: Allows the LLM to evaluate (render) any Jinja2 template with optional variables. This can be used to test template expressions or render dynamic output for the user.
-- **`EnumerateIcons`**: Allows the LLM to search or retrieve common Material Design Icons (MDI) to select appropriate icons for created/updated entities.
+- **`GetCommonIcons`**: Allows the LLM to search common and active server MDI icons, or validate that a specific icon exists in the full MDI database.

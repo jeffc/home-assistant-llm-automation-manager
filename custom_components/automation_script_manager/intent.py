@@ -82,13 +82,31 @@ class CreateAutomationIntent(intent.IntentHandler):
                 f"{assign_rule}{debug_rule}"
             )
 
-        part1 = """Create or update an automation.
+        entry = next(iter(self.hass.config_entries.async_entries(DOMAIN)), None)
+        options = entry.options if entry else {}
+        let_llm_assign_icon = options.get("let_llm_assign_icon", True)
+
+        icon_hint = ""
+        if let_llm_assign_icon:
+            icon_hint = (
+                "\n\nICON ASSIGNMENT GUIDELINE:\n"
+                "You should pick an appropriate Material Design Icon (MDI) for the created "
+                "or updated entity and pass it in the 'icon' slot (e.g. 'mdi:lightbulb' "
+                "for lights, 'mdi:fan' for fans). Use your general MDI knowledge, or call "
+                "`GetCommonIcons` with 'search_term' to search for icons, or call "
+                "`GetCommonIcons` with 'icon_to_validate' to check if a specific icon exists."
+            )
+
+        part1 = (
+            """Create or update an automation.
 Exposes triggers, conditions, and actions.
 
 DECISION GUIDELINE: Creating an automation is appropriate when the user wants
 event-driven, conditional, or scheduled behavior (e.g. if the user says 'whenever X, do Y',
 'when X occurs, do Y', or 'schedule action Z at time T'). For immediate, on-demand
-action execution, prefer creating or running scripts instead.
+action execution, prefer creating or running scripts instead."""
+            + icon_hint
+            + """
 
 TEMPLATE GUIDELINE: Always prefer using built-in, non-templated options
 (such as numeric state trigger thresholds or standard state triggers) if a
@@ -97,6 +115,7 @@ are necessary for complex triggers, conditions, or other automation logic, you
 may write them. If you need to search or inspect the available Jinja2 template
 functions, filters, or tests registered in Home Assistant, you must call
 `GetTemplateHelperDocs`."""
+        )
 
         part2 = f"\n\nONE-TIME VS EVERY-TIME GUIDELINE: {guidelines}{categorize_guidelines}"
 
@@ -177,11 +196,12 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
     @property
     def slot_schema(self) -> dict | None:
         """Return slot schema."""
-        schema = {
+        return {
             vol.Optional("id"): cv.string,
             vol.Optional("entity_id"): cv.entity_id,
             vol.Optional("alias"): cv.string,
             vol.Optional("description"): cv.string,
+            vol.Optional("icon"): cv.string,
             vol.Required("trigger"): vol.Any(list, dict),
             vol.Optional("condition"): vol.Any(list, dict),
             vol.Required("action"): vol.Any(list, dict),
@@ -190,18 +210,9 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
                 ["delete_self", "disable_self", "persist"]
             ),
             vol.Optional("validate_only"): cv.boolean,
+            vol.Optional("reasoning"): cv.string,
+            vol.Optional("category_id"): cv.string,
         }
-
-        # Check if debug mode is enabled. If so, add optional reasoning slot.
-        entry = next(iter(self.hass.config_entries.async_entries(DOMAIN)), None)
-        options = entry.options if entry else {}
-        if options.get("debug_mode", False):
-            schema[vol.Optional("reasoning")] = cv.string
-
-        if options.get("categorize_mode") == "auto_categorize":
-            schema[vol.Optional("category_id")] = cv.string
-
-        return schema
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         """Handle the intent by calling our service."""
@@ -214,6 +225,7 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
             "entity_id",
             "alias",
             "description",
+            "icon",
             "trigger",
             "condition",
             "action",
@@ -271,6 +283,10 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
         else:
             error_msg = result.get("error") if result else "Unknown error"
             msg = f"Failed to create automation: {error_msg}"
+            response.async_set_error(
+                intent.IntentResponseErrorCode.FAILED_TO_HANDLE,
+                msg,
+            )
             if reasoning:
                 msg += f" Reasoning: {reasoning}"
                 response.async_set_speech(msg, extra_data={"reasoning": reasoning})
@@ -325,7 +341,12 @@ class DeleteAutomationIntent(intent.IntentHandler):
             response.async_set_speech(f"Automation '{result.get('id')}' deleted successfully.")
         else:
             error_msg = result.get("error") if result else "Unknown error"
-            response.async_set_speech(f"Failed to delete automation: {error_msg}")
+            msg = f"Failed to delete automation: {error_msg}"
+            response.async_set_error(
+                intent.IntentResponseErrorCode.FAILED_TO_HANDLE,
+                msg,
+            )
+            response.async_set_speech(msg)
         return response
 
 
@@ -376,13 +397,31 @@ class CreateScriptIntent(intent.IntentHandler):
                 f"{assign_rule}{debug_rule}"
             )
 
-        part1 = """Create or update a script in Home Assistant. Scripts define a sequence
+        entry = next(iter(self.hass.config_entries.async_entries(DOMAIN)), None)
+        options = entry.options if entry else {}
+        let_llm_assign_icon = options.get("let_llm_assign_icon", True)
+
+        icon_hint = ""
+        if let_llm_assign_icon:
+            icon_hint = (
+                "\n\nICON ASSIGNMENT GUIDELINE:\n"
+                "You should pick an appropriate Material Design Icon (MDI) for the created "
+                "or updated entity and pass it in the 'icon' slot (e.g. 'mdi:lightbulb' "
+                "for lights, 'mdi:fan' for fans). Use your general MDI knowledge, or call "
+                "`GetCommonIcons` with 'search_term' to search for icons, or call "
+                "`GetCommonIcons` with 'icon_to_validate' to check if a specific icon exists."
+            )
+
+        part1 = (
+            """Create or update a script in Home Assistant. Scripts define a sequence
 of actions.
 
 GATHER THEN ACT GUIDELINE: You MUST NOT call this tool until all relevant details (such
 as entity IDs and action argument structures) have been confirmed. If you do not know the
 required parameters for an action, you must first call `GetActionDetails` or check exposed
-entities rather than guessing or calling `CreateScript` with incomplete details.
+entities rather than guessing or calling `CreateScript` with incomplete details."""
+            + icon_hint
+            + """
 
 TEMPLATE GUIDELINE: Always prefer using built-in, non-templated options
 (such as numeric state trigger thresholds or standard state triggers) if a
@@ -391,6 +430,7 @@ are necessary for complex triggers, conditions, or other automation logic, you
 may write them. If you need to search or inspect the available Jinja2 template
 functions, filters, or tests registered in Home Assistant, you must call
 `GetTemplateHelperDocs`."""
+        )
 
         part2 = f"{categorize_guidelines}"
 
@@ -448,27 +488,19 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
     @property
     def slot_schema(self) -> dict | None:
         """Return slot schema."""
-        schema = {
+        return {
             vol.Optional("id"): cv.string,
             vol.Optional("entity_id"): cv.entity_id,
             vol.Optional("alias"): cv.string,
             vol.Optional("description"): cv.string,
+            vol.Optional("icon"): cv.string,
             vol.Required("sequence"): vol.Any(list, dict),
             vol.Optional("mode"): cv.string,
             vol.Optional("on_completion"): vol.In(["delete_self", "persist"]),
             vol.Optional("validate_only"): cv.boolean,
+            vol.Optional("reasoning"): cv.string,
+            vol.Optional("category_id"): cv.string,
         }
-
-        # Check if debug mode is enabled. If so, add optional reasoning slot.
-        entry = next(iter(self.hass.config_entries.async_entries(DOMAIN)), None)
-        options = entry.options if entry else {}
-        if options.get("debug_mode", False):
-            schema[vol.Optional("reasoning")] = cv.string
-
-        if options.get("categorize_mode") == "auto_categorize":
-            schema[vol.Optional("category_id")] = cv.string
-
-        return schema
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         """Handle the intent by calling our service."""
@@ -481,6 +513,7 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
             "entity_id",
             "alias",
             "description",
+            "icon",
             "sequence",
             "mode",
             "on_completion",
@@ -536,6 +569,10 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
         else:
             error_msg = result.get("error") if result else "Unknown error"
             msg = f"Failed to create script: {error_msg}"
+            response.async_set_error(
+                intent.IntentResponseErrorCode.FAILED_TO_HANDLE,
+                msg,
+            )
             if reasoning:
                 msg += f" Reasoning: {reasoning}"
                 response.async_set_speech(msg, extra_data={"reasoning": reasoning})
@@ -587,7 +624,12 @@ class DeleteScriptIntent(intent.IntentHandler):
             response.async_set_speech(f"Script '{result.get('id')}' deleted successfully.")
         else:
             error_msg = result.get("error") if result else "Unknown error"
-            response.async_set_speech(f"Failed to delete script: {error_msg}")
+            msg = f"Failed to delete script: {error_msg}"
+            response.async_set_error(
+                intent.IntentResponseErrorCode.FAILED_TO_HANDLE,
+                msg,
+            )
+            response.async_set_speech(msg)
         return response
 
 
@@ -964,13 +1006,15 @@ class RenderTemplateIntent(intent.IntentHandler):
         return response
 
 
-class EnumerateIconsIntent(intent.IntentHandler):
-    """Handle EnumerateIcons intent."""
+class GetCommonIconsIntent(intent.IntentHandler):
+    """Handle GetCommonIcons intent."""
 
-    intent_type = "EnumerateIcons"
+    intent_type = "GetCommonIcons"
     description = (
-        "Search or retrieve common Material Design Icons (MDI) used in Home Assistant. "
-        "Useful for selecting appropriate icons for automations and scripts."
+        "Search common/active icons or validate any Material Design Icon (MDI) "
+        "used in Home Assistant. Allows looking up common icon names by keyword "
+        "(search_term) or validating that a specific icon exists (icon_to_validate) "
+        "before using it. You can also use your own general knowledge of MDI icon names."
     )
 
     def __init__(self, hass: HomeAssistant) -> None:
@@ -983,27 +1027,40 @@ class EnumerateIconsIntent(intent.IntentHandler):
         """Return slot schema."""
         return {
             vol.Optional("search_term"): cv.string,
+            vol.Optional("icon_to_validate"): cv.string,
         }
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         """Handle the intent."""
         slots = intent_obj.slots
         search_term = slots["search_term"]["value"] if "search_term" in slots else None
+        icon_to_validate = (
+            slots["icon_to_validate"]["value"] if "icon_to_validate" in slots else None
+        )
 
         response = intent_obj.create_response()
 
-        from . import async_enumerate_icons
-        icons = async_enumerate_icons(search_term)
+        from . import async_get_common_icons
+        result = async_get_common_icons(intent_obj.hass, search_term, icon_to_validate)
 
-        if not icons:
-            response.async_set_speech("No matching icons found.")
-            return response
+        speech_parts = []
 
-        speech_parts = ["Here are the matching icons:"]
-        for item in icons:
-            speech_parts.append(
-                f"- `{item['icon']}` (Category: {item['category']}): {item['description']}"
-            )
+        if icon_to_validate:
+            valid = result.get("valid", False)
+            status = "is valid and exists" if valid else "is NOT valid or does not exist"
+            speech_parts.append(f"Icon '{icon_to_validate}' {status}.")
+
+        if "icons" in result:
+            icons = result["icons"]
+            if not icons:
+                if not icon_to_validate:
+                    speech_parts.append("No matching icons found.")
+            else:
+                speech_parts.append("\nMatching icons:")
+                for item in icons:
+                    speech_parts.append(
+                        f"- `{item['icon']}`: {item['description']}"
+                    )
 
         response.async_set_speech("\n".join(speech_parts))
         return response
@@ -1021,4 +1078,8 @@ async def async_setup_intents(hass: HomeAssistant) -> None:
     intent.async_register(hass, GetEntityTracesIntent(hass))
     intent.async_register(hass, GetTemplateHelperDocsIntent(hass))
     intent.async_register(hass, RenderTemplateIntent(hass))
-    intent.async_register(hass, EnumerateIconsIntent(hass))
+
+    entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
+    options = entry.options if entry else {}
+    if options.get("let_llm_assign_icon", True):
+        intent.async_register(hass, GetCommonIconsIntent(hass))

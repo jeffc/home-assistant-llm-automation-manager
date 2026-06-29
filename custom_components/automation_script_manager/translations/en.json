@@ -14,36 +14,62 @@
     "step": {
       "init": {
         "title": "Configure Options",
-        "description": "Configure the global settings for Automation & Script Manager.\n\n### Allowed Actions Security Policy\nRestrict what service actions can be executed by AI conversation agents. Lines starting with # are ignored.",
+        "description": "Configure the global settings for Automation & Script Manager.",
         "data": {
           "tag": "Entity Tag (Label)",
           "one_shot_tag": "One-Shot Entity Tag (Label)",
+          "expose_llm_tools": "Expose AI LLM Tools",
+          "let_llm_assign_icon": "Let LLM assign icons",
+          "prompt_one_time_vs_recurring": "Prompt LLM to be explicit about one-time vs recurring",
+          "debug_mode": "LLM Generation Debug Mode",
+          "categorize_mode": "Categorize Mode",
           "restrict_deletion": "Restrict deletion to tagged entities only",
           "disable_instead_of_delete": "Disable instead of delete",
-           "would_be_deleted_tag": "Disable Override Tag (Label)",
-          "expose_llm_tools": "Expose AI LLM Tools",
-          "prompt_one_time_vs_recurring": "Prompt LLM to be explicit about one-time vs recurring",
-          "categorize_mode": "Categorize Mode",
-          "specified_automation_category": "Specified Automation Category",
-          "specified_script_category": "Specified Script Category",
-          "always_assign_category": "Always assign a category (Auto-categorize)",
-          "debug_mode": "LLM Generation Debug Mode",
-          "disallow_regexes": "Denied Action Regexes",
-          "allow_regexes": "Allowed Action Regexes"
+          "would_be_deleted_tag": "Disable Override Tag (Label)"
         },
         "data_description": {
           "tag": "The tag (label name) to assign automatically to all created automations/scripts. If the label doesn't exist, it will be registered in Home Assistant.",
           "one_shot_tag": "A second tag (label name) to assign specifically to temporary/one-shot entities (i.e. those with a self-destruct completion action), in addition to the global entity tag.",
+          "expose_llm_tools": "Expose the creation and deletion actions as tools to conversation LLM agents.",
+          "let_llm_assign_icon": "If enabled, the AI assistant will be allowed to choose custom icons for created/updated entities and will be equipped with the GetCommonIcons search tool.",
+          "prompt_one_time_vs_recurring": "If enabled, the LLM will be explicitly instructed to state in its speech response whether the generated automation is one-time or recurring.",
+          "debug_mode": "If enabled, LLM intent handlers will accept an optional reasoning parameter, log it to the system log, and include it in the response.",
+          "categorize_mode": "Choose how to handle categorization of generated entities: 'Leave uncategorized', 'Put in specified category' (requires next step to pick categories), or 'Auto-categorize' (requires next step for fallback logic). If no categories exist in Home Assistant, only 'Leave uncategorized' will be available.",
           "restrict_deletion": "If enabled, delete actions will fail for any automation or script that does not have the specified tag.",
           "disable_instead_of_delete": "If enabled, automations and scripts that would be deleted (either via service call or self-destruct completion action) are disabled/modified to prevent execution rather than removed.",
-          "would_be_deleted_tag": "The tag (label name) to assign specifically to entities that have been disabled instead of deleted.",
-          "expose_llm_tools": "Expose the creation and deletion actions as tools to conversation LLM agents.",
-          "prompt_one_time_vs_recurring": "If enabled, the LLM will be explicitly instructed to state in its speech response whether the generated automation is one-time or recurring.",
-          "categorize_mode": "How to categorize generated scripts and automations. Options are 'Leave uncategorized', 'Put in specified category', or 'Auto-categorize' (LLM selects dynamically).",
-          "specified_automation_category": "The specific category to assign to all generated automations when 'Put in specified category' is selected.",
-          "specified_script_category": "The specific category to assign to all generated scripts when 'Put in specified category' is selected.",
-          "always_assign_category": "If auto-categorize is enabled, force the LLM to choose a category even if there isn't a strong match. If disabled, it can leave them uncategorized when there is no good match.",
-          "debug_mode": "If enabled, LLM intent handlers will accept an optional reasoning parameter, log it to the system log, and include it in the response.",
+          "would_be_deleted_tag": "The tag (label name) to assign specifically to entities that have been disabled instead of deleted."
+        }
+      },
+      "category_specified": {
+        "title": "Select Specific Categories",
+        "description": "Select the default categories that will be assigned to all newly created or updated automations and scripts when 'Put in specified category' categorization mode is active.",
+        "data": {
+          "specified_automation_category": "Automation Category",
+          "specified_script_category": "Script Category"
+        },
+        "data_description": {
+          "specified_automation_category": "The specific category to assign automatically to all generated automations. Choose 'None' to leave automations uncategorized.",
+          "specified_script_category": "The specific category to assign automatically to all generated scripts. Choose 'None' to leave scripts uncategorized."
+        }
+      },
+      "category_auto": {
+        "title": "Auto-Categorization Settings",
+        "description": "Configure settings for the dynamic AI-driven categorization behavior.",
+        "data": {
+          "always_assign_category": "Always Assign a Category"
+        },
+        "data_description": {
+          "always_assign_category": "If enabled, the LLM is strictly required to pick the closest category ID from the list of existing categories. If disabled, the LLM is allowed to leave the entity uncategorized if it determines that no category is a strong fit."
+        }
+      },
+      "security": {
+        "title": "Allowed Actions Security Policy",
+        "description": "Restrict what service actions can be executed by AI conversation agents. Lines starting with # are ignored.",
+        "data": {
+          "disallow_regexes": "Denied Action Regexes",
+          "allow_regexes": "Allowed Action Regexes"
+        },
+        "data_description": {
           "disallow_regexes": "List of regular expressions (one per line, e.g. 'homeassistant\\..*') specifying blocked actions. Checked first; matches are immediately blocked. Lines starting with # are treated as comments.",
           "allow_regexes": "List of regular expressions (one per line, e.g. 'light\\..*') specifying allowed actions. If specified, only actions matching one or more rules will be permitted. Lines starting with # are treated as comments."
         }

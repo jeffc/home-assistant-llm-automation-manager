@@ -53,6 +53,7 @@ CREATE_AUTOMATION_SCHEMA = vol.Schema(
         vol.Optional("config"): dict,
         vol.Optional("alias"): cv.string,
         vol.Optional("description"): cv.string,
+        vol.Optional("icon"): cv.string,
         vol.Optional("trigger"): cv.match_all,
         vol.Optional("triggers"): cv.match_all,
         vol.Optional("condition"): cv.match_all,
@@ -83,6 +84,7 @@ CREATE_SCRIPT_SCHEMA = vol.Schema(
         vol.Optional("config"): dict,
         vol.Optional("alias"): cv.string,
         vol.Optional("description"): cv.string,
+        vol.Optional("icon"): cv.string,
         vol.Optional("sequence"): cv.match_all,
         vol.Optional("mode"): cv.string,
         vol.Optional("on_completion", default="persist"): vol.In(
@@ -127,9 +129,10 @@ RENDER_TEMPLATE_SCHEMA = vol.Schema(
     }
 )
 
-ENUMERATE_ICONS_SCHEMA = vol.Schema(
+GET_COMMON_ICONS_SCHEMA = vol.Schema(
     {
         vol.Optional("search_term"): cv.string,
+        vol.Optional("icon_to_validate"): cv.string,
     }
 )
 
@@ -796,21 +799,89 @@ COMMON_ICONS = [
 ]
 
 
-def async_enumerate_icons(
+def async_get_common_icons(
+    hass: HomeAssistant,
     search_term: str | None = None,
-) -> list[dict[str, str]]:
-    """Return a list of common home automation icons matching the search term."""
-    if not search_term:
-        return COMMON_ICONS
+    icon_to_validate: str | None = None,
+) -> dict[str, Any]:
+    """Search common home automation icons and active server icons, or validate an icon."""
+    # Collect and count frequencies of active icons from current server states and entity registry
+    active_icon_counts = {}
+    try:
+        for state in hass.states.async_all():
+            icon = state.attributes.get("icon")
+            if icon and isinstance(icon, str) and icon.startswith("mdi:"):
+                active_icon_counts[icon] = active_icon_counts.get(icon, 0) + 1
 
-    term = search_term.lower()
-    return [
-        item
-        for item in COMMON_ICONS
-        if term in item["icon"].lower()
-        or term in item["description"].lower()
-        or term in item["category"].lower()
-    ]
+        from homeassistant.helpers import entity_registry as er
+        ent_reg = er.async_get(hass)
+        if hasattr(ent_reg, "entities"):
+            for entry in ent_reg.entities.values():
+                icon = entry.icon or entry.original_icon
+                if icon and isinstance(icon, str) and icon.startswith("mdi:"):
+                    active_icon_counts[icon] = active_icon_counts.get(icon, 0) + 1
+    except Exception as err:
+        _LOGGER.warning("Failed to collect active server icons: %s", err)
+
+    # Sort active icons by frequency (highest first) and cap at 30 to avoid context clutter
+    sorted_active = sorted(active_icon_counts.items(), key=lambda x: x[1], reverse=True)
+    top_active = [icon for icon, _ in sorted_active[:30]]
+
+    combined_list = list(COMMON_ICONS)
+    existing_icons = {item["icon"] for item in combined_list}
+    for active_icon in top_active:
+        if active_icon not in existing_icons:
+            combined_list.append(
+                {
+                    "icon": active_icon,
+                    "description": "Active icon in use on this server",
+                    "category": "active_server_icon",
+                }
+            )
+
+    result = {}
+
+    if icon_to_validate:
+        import json
+        import os
+        import hass_frontend
+
+        name = icon_to_validate.lower()
+        if name.startswith("mdi:"):
+            name = name[4:]
+
+        frontend_path = hass_frontend.__path__[0]
+        json_path = os.path.join(frontend_path, "static", "mdi", "iconList.json")
+
+        valid = False
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, encoding="utf-8") as f:
+                    all_icons = json.load(f)
+                valid = any(item.get("name") == name for item in all_icons)
+            except Exception as err:
+                _LOGGER.warning("Failed to load iconList.json for validation: %s", err)
+                valid = ":" in icon_to_validate
+        else:
+            valid = ":" in icon_to_validate
+        result["valid"] = valid
+
+    if search_term is not None or not icon_to_validate:
+        term = (search_term or "").strip().lower()
+        matches = []
+        for item in combined_list:
+            if (
+                not term
+                or term in item["icon"].lower()
+                or term in item["description"].lower()
+                or term in item["category"].lower()
+            ):
+                matches.append(item)
+                if len(matches) >= 50:
+                    break
+        result["icons"] = matches
+
+    return result
 
 
 async def async_evaluate_template(
@@ -1848,17 +1919,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.ONLY,
     )
 
-    async def async_enumerate_icons_service(call: ServiceCall) -> ServiceResponse:
-        """Enumerate or search common home automation icons."""
+    async def async_get_common_icons_service(call: ServiceCall) -> ServiceResponse:
+        """Get common or active home automation icons, or validate an icon."""
         search_term = call.data.get("search_term")
-        results = async_enumerate_icons(search_term)
-        return {"icons": results}
+        icon_to_validate = call.data.get("icon_to_validate")
+        results = async_get_common_icons(hass, search_term, icon_to_validate)
+        return results
 
     hass.services.async_register(
         DOMAIN,
-        "enumerate_icons",
-        async_enumerate_icons_service,
-        schema=ENUMERATE_ICONS_SCHEMA,
+        "get_common_icons",
+        async_get_common_icons_service,
+        schema=GET_COMMON_ICONS_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -1888,7 +1960,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "get_entity_traces",
         "get_template_helper_docs",
         "render_template",
-        "enumerate_icons",
+        "get_common_icons",
     ):
         hass.services.async_remove(DOMAIN, service)
 
@@ -1902,7 +1974,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "GetEntityTraces",
         "GetTemplateHelperDocs",
         "RenderTemplate",
-        "EnumerateIcons",
+        "GetCommonIcons",
     ):
         try:
             intent.async_remove(hass, intent_type)
