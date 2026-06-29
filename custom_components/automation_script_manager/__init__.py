@@ -111,6 +111,20 @@ GET_ENTITY_TRACES_SCHEMA = vol.Schema(
     }
 )
 
+GET_TEMPLATE_HELPER_DOCS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("search_term"): cv.string,
+        vol.Optional("only_custom", default=True): cv.boolean,
+    }
+)
+
+RENDER_TEMPLATE_SCHEMA = vol.Schema(
+    {
+        vol.Required("template"): cv.string,
+        vol.Optional("variables"): dict,
+    }
+)
+
 
 def _parse_json_fallback(value: Any) -> Any:
     """Parse JSON/Python string if value is wrapped in a dict or is a string itself."""
@@ -490,6 +504,112 @@ async def async_fetch_entity_traces(
     }
 
 
+def _validate_templates(hass: HomeAssistant, data: Any) -> None:
+    """Recursively validate Jinja2 template strings in config data."""
+    from homeassistant.helpers.template import is_template_string, Template
+
+    if isinstance(data, dict):
+        for val in data.values():
+            _validate_templates(hass, val)
+    elif isinstance(data, list):
+        for item in data:
+            _validate_templates(hass, item)
+    elif isinstance(data, str):
+        if is_template_string(data):
+            try:
+                Template(data, hass).ensure_valid()
+            except Exception as err:
+                raise ValueError(
+                    f"Invalid Jinja2 template '{data}': {err}"
+                ) from err
+
+
+async def async_get_template_helper_docs(
+    hass: HomeAssistant,
+    search_term: str | None = None,
+    only_custom: bool = True,
+) -> dict[str, Any]:
+    """Compile documentation for available Jinja2 template helpers."""
+    from homeassistant.helpers.template import TemplateEnvironment
+    import jinja2.defaults
+    import inspect
+
+    env = TemplateEnvironment(hass)
+
+    # Standard Jinja2 defaults
+    std_filters = set(jinja2.defaults.DEFAULT_FILTERS.keys())
+    std_tests = set(jinja2.defaults.DEFAULT_TESTS.keys())
+    std_globals = {"range", "dict", "lipsum", "cycler", "joiner", "namespace"}
+
+    categories = {
+        "globals": env.globals,
+        "filters": env.filters,
+        "tests": env.tests,
+    }
+
+    result = {
+        "globals": [],
+        "filters": [],
+        "tests": [],
+    }
+
+    for cat_name, helpers in categories.items():
+        for name, func in helpers.items():
+            # Apply only_custom filter
+            if only_custom:
+                if cat_name == "filters" and name in std_filters:
+                    continue
+                if cat_name == "tests" and name in std_tests:
+                    continue
+                if cat_name == "globals" and name in std_globals:
+                    continue
+
+            # Get description and signature
+            doc = "No description available."
+            sig = "(...)"
+            if callable(func):
+                if func.__doc__:
+                    doc = func.__doc__.strip()
+                try:
+                    sig = str(inspect.signature(func))
+                except (ValueError, TypeError):
+                    pass
+
+            # Apply search_term filter
+            if search_term:
+                term = search_term.lower()
+                if term not in name.lower() and term not in doc.lower():
+                    continue
+
+            result[cat_name].append({
+                "name": name,
+                "signature": sig,
+                "description": doc,
+            })
+
+    # Sort results alphabetically
+    for key in result:
+        result[key].sort(key=lambda x: x["name"])
+
+    return result
+
+
+async def async_evaluate_template(
+    hass: HomeAssistant,
+    template_str: str,
+    variables: dict[str, Any] | None = None,
+) -> str:
+    """Evaluate a Jinja2 template and return the rendered string result."""
+    from homeassistant.helpers.template import Template
+    try:
+        res = Template(template_str, hass).async_render(variables)
+        return str(res)
+    except Exception as err:
+        raise HomeAssistantError(
+            f"Failed to render template: {err}"
+        ) from err
+
+
 def _read_yaml(path: str) -> Any:
     """Read YAML helper."""
     if not os.path.isfile(path):
@@ -759,6 +879,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         f"Action '{act}' is blocked by security policy"
                     )
 
+            # Validate any template syntax recursively
+            _validate_templates(hass, config_data)
+
             # Validate the configuration
             await async_validate_automation_item(hass, config_key, config_data)
 
@@ -944,6 +1067,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
                 return {"success": True, "id": config_key}
 
+            # Turn off automation before deleting it from YAML/registry
+            ent_reg = er.async_get(hass)
+            reg_entity_id = entity_id or ent_reg.async_get_entity_id(
+                AUTOMATION_DOMAIN, AUTOMATION_DOMAIN, config_key
+            )
+            if reg_entity_id:
+                try:
+                    await hass.services.async_call(
+                        AUTOMATION_DOMAIN,
+                        "turn_off",
+                        {"entity_id": reg_entity_id},
+                    )
+                    _LOGGER.info(
+                        "Turned off automation '%s' before deletion",
+                        reg_entity_id,
+                    )
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Failed to turn off automation '%s' before deletion: %s",
+                        reg_entity_id,
+                        err,
+                    )
+
             path = hass.config.path(AUTOMATION_CONFIG_PATH)
             lock = hass.data[DOMAIN]["automation_lock"]
 
@@ -1087,6 +1233,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     raise ValueError(
                         f"Action '{act}' is blocked by security policy"
                     )
+
+            # Validate any template syntax recursively
+            _validate_templates(hass, config_data)
 
             # Validate the configuration
             await async_validate_script_item(hass, config_key, config_data)
@@ -1375,6 +1524,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.ONLY,
     )
 
+    async def async_get_template_helper_docs_service(
+        call: ServiceCall,
+    ) -> ServiceResponse:
+        """Fetch documentation for Jinja2 template helpers."""
+        search_term = call.data.get("search_term")
+        only_custom = call.data.get("only_custom", True)
+        try:
+            return await async_get_template_helper_docs(
+                hass, search_term, only_custom
+            )
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Failed to fetch template helper docs: {err}"
+            ) from err
+
+    hass.services.async_register(
+        DOMAIN,
+        "get_template_helper_docs",
+        async_get_template_helper_docs_service,
+        schema=GET_TEMPLATE_HELPER_DOCS_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    async def async_render_template_service(call: ServiceCall) -> ServiceResponse:
+        """Render a Jinja2 template with optional variables."""
+        template_str = call.data["template"]
+        variables = call.data.get("variables")
+        try:
+            rendered = await async_evaluate_template(
+                hass, template_str, variables
+            )
+            return {"result": rendered}
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Template rendering failed: {err}"
+            ) from err
+
+    hass.services.async_register(
+        DOMAIN,
+        "render_template",
+        async_render_template_service,
+        schema=RENDER_TEMPLATE_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
     # Setup intents for LLM tools conditionally
     expose_llm_tools = entry.options.get("expose_llm_tools", True)
     if expose_llm_tools:
@@ -1399,6 +1593,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "delete_script",
         "get_allowed_actions",
         "get_entity_traces",
+        "get_template_helper_docs",
+        "render_template",
     ):
         hass.services.async_remove(DOMAIN, service)
 
@@ -1410,6 +1606,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "CreateScript",
         "DeleteScript",
         "GetEntityTraces",
+        "GetTemplateHelperDocs",
+        "RenderTemplate",
     ):
         try:
             intent.async_remove(hass, intent_type)

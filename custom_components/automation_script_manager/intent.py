@@ -22,6 +22,14 @@ event-driven, conditional, or scheduled behavior (e.g. if the user says 'wheneve
 'when X occurs, do Y', or 'schedule action Z at time T'). For immediate, on-demand
 action execution, prefer creating or running scripts instead.
 
+TEMPLATE GUIDELINE: Always prefer using built-in, non-templated options
+(such as numeric state trigger thresholds or standard state triggers) if a
+built-in equivalent exists that can accomplish the goal. However, if templates
+are necessary for complex triggers, conditions, or other automation logic, you
+may write them. If you need to search or inspect the available Jinja2 template
+functions, filters, or tests registered in Home Assistant, you must call
+`GetTemplateHelperDocs`.
+
 ONE-TIME VS EVERY-TIME GUIDELINE: In your response to the user, you must be clear
 about whether the automation is a one-time action or runs every time. If the user
 says 'when' or 'next time', assume a one-time automation (and use 'on_completion':
@@ -261,6 +269,14 @@ GATHER THEN ACT GUIDELINE: You MUST NOT call this tool until all relevant detail
 as entity IDs and action argument structures) have been confirmed. If you do not know the
 required parameters for an action, you must first call `GetActionDetails` or check exposed
 entities rather than guessing or calling `CreateScript` with incomplete details.
+
+TEMPLATE GUIDELINE: Always prefer using built-in, non-templated options
+(such as numeric state trigger thresholds or standard state triggers) if a
+built-in equivalent exists that can accomplish the goal. However, if templates
+are necessary for complex triggers, conditions, or other automation logic, you
+may write them. If you need to search or inspect the available Jinja2 template
+functions, filters, or tests registered in Home Assistant, you must call
+`GetTemplateHelperDocs`.
 
 ATOMICITY & ID PROPAGATION GUIDELINE: Do not call this tool incrementally to construct
 or update a script in parts. If you are modifying/updating an existing script created
@@ -708,6 +724,123 @@ class GetEntityTracesIntent(intent.IntentHandler):
         return response
 
 
+class GetTemplateHelperDocsIntent(intent.IntentHandler):
+    """Handle GetTemplateHelperDocs intent."""
+
+    intent_type = "GetTemplateHelperDocs"
+    description = (
+        "Get documentation for available Jinja2 template helper functions, "
+        "filters, and tests registered in Home Assistant."
+    )
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
+
+    @property
+    def slot_schema(self) -> dict | None:
+        """Return slot schema."""
+        return {
+            vol.Optional("search_term"): cv.string,
+            vol.Optional("only_custom"): cv.boolean,
+        }
+
+    async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
+        """Handle the intent."""
+        hass = intent_obj.hass
+        slots = intent_obj.slots
+
+        search_term = (
+            slots["search_term"]["value"].strip()
+            if "search_term" in slots
+            else None
+        )
+        only_custom = (
+            slots["only_custom"]["value"] if "only_custom" in slots else True
+        )
+
+        response = intent_obj.create_response()
+
+        from . import async_get_template_helper_docs
+        try:
+            docs = await async_get_template_helper_docs(
+                hass, search_term, only_custom
+            )
+        except Exception as err:
+            response.async_set_speech(
+                f"Failed to fetch template helper documentation: {err}"
+            )
+            return response
+
+        speech_parts = ["Jinja2 Template Helper Documentation:"]
+
+        for category in ("globals", "filters", "tests"):
+            helpers = docs.get(category, [])
+            if helpers:
+                speech_parts.append(f"\n{category.capitalize()}:")
+                for h in helpers:
+                    desc_first_line = h["description"].split("\n")[0]
+                    speech_parts.append(
+                        f"- `{h['name']}{h['signature']}`: {desc_first_line}"
+                    )
+
+        if len(speech_parts) == 1:
+            speech_parts.append("No matching template helpers found.")
+
+        response.async_set_speech("\n".join(speech_parts))
+        return response
+
+
+class RenderTemplateIntent(intent.IntentHandler):
+    """Handle RenderTemplate intent."""
+
+    intent_type = "RenderTemplate"
+    description = (
+        "Evaluate (render) a Jinja2 template and return the result. "
+        "Useful for testing template expressions or rendering dynamic outputs "
+        "to return to the user."
+    )
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
+
+    @property
+    def slot_schema(self) -> dict | None:
+        """Return slot schema."""
+        return {
+            vol.Required("template"): cv.string,
+            vol.Optional("variables"): dict,
+        }
+
+    async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
+        """Handle the intent."""
+        hass = intent_obj.hass
+        slots = intent_obj.slots
+
+        template_str = slots["template"]["value"]
+        variables = slots["variables"]["value"] if "variables" in slots else None
+
+        response = intent_obj.create_response()
+
+        from . import async_evaluate_template
+        try:
+            result = await async_evaluate_template(
+                hass, template_str, variables
+            )
+            response.async_set_speech(
+                f"Template rendered successfully:\n{result}"
+            )
+        except Exception as err:
+            response.async_set_speech(
+                f"Failed to render template: {err}"
+            )
+
+        return response
+
+
 async def async_setup_intents(hass: HomeAssistant) -> None:
     """Register intents with the Home Assistant intent system."""
     intent.async_register(hass, CreateAutomationIntent(hass))
@@ -718,3 +851,5 @@ async def async_setup_intents(hass: HomeAssistant) -> None:
     intent.async_register(hass, EnumerateActionsIntent(hass))
     intent.async_register(hass, GetActionDetailsIntent(hass))
     intent.async_register(hass, GetEntityTracesIntent(hass))
+    intent.async_register(hass, GetTemplateHelperDocsIntent(hass))
+    intent.async_register(hass, RenderTemplateIntent(hass))

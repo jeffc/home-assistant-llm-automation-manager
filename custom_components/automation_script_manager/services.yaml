@@ -229,3 +229,38 @@ get_entity_traces:
       example: 1234567890abcdef
       selector:
         text:
+
+get_template_helper_docs:
+  name: Get Template Helper Docs
+  description: Retrieve documentation, signatures, and descriptions for available Jinja2 template functions, filters, and tests.
+  fields:
+    search_term:
+      name: Search Term
+      description: Optional term to search for in helper names or descriptions.
+      example: device
+      selector:
+        text:
+    only_custom:
+      name: Only Custom
+      description: If true, only returns Home Assistant specific custom template helpers (hides standard Jinja2 defaults).
+      default: true
+      selector:
+        boolean:
+
+render_template:
+  name: Render Template
+  description: Evaluate (render) a Jinja2 template and return the result.
+  fields:
+    template:
+      name: Template
+      description: The Jinja2 template string to render.
+      example: "{{ states('light.living_room') }}"
+      required: true
+      selector:
+        text:
+          multiline: true
+    variables:
+      name: Variables
+      description: Optional dictionary of variables to pass into the template environment.
+      selector:
+        object:

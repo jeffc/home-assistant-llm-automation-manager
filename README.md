@@ -278,9 +278,25 @@ Retrieves recent execution runs and detailed step traces for a specific automati
 - `entity_id` (Required): The entity ID of the automation or script (e.g. `automation.my_automation` or `script.my_script`).
 - `run_id` (Optional): The optional execution Run ID. If omitted, defaults to the most recent run.
 
+### `automation_script_manager.get_template_helper_docs`
+Retrieves documentation, python signatures, and descriptions for available Jinja2 template functions, filters, and tests.
+
+**Parameters:**
+- `search_term` (Optional): A search term to filter helper names and descriptions.
+- `only_custom` (Optional): A boolean that, when set to `true`, only returns Home Assistant specific custom template helpers (hides standard Jinja2 defaults). Defaults to `true`.
+
+### `automation_script_manager.render_template`
+Evaluates (renders) a Jinja2 template with optional variables and returns the result.
+
+**Parameters:**
+- `template` (Required): The Jinja2 template string to render.
+- `variables` (Optional): A dictionary of variables to pass into the template context.
+
 ---
 
 ## Conversation AI Intents (LLM Tools)
 The integration automatically registers custom intents that are exposed as tools to conversation agents:
 - **`GetEntityTraces`**: Allows the LLM to get execution traces and recent run details for a specific automation or script entity.
   *   **Restriction**: To preserve user privacy and security, this intent enforces that the target entity **must be exposed** to the conversation assistant (i.e. `async_should_expose(hass, "conversation", entity_id)` must be true). If the entity is not exposed, the tool call returns an error.
+- **`GetTemplateHelperDocs`**: Allows the LLM to search or inspect the available Jinja2 template helper functions, filters, and tests registered in Home Assistant to aid in template generation.
+- **`RenderTemplate`**: Allows the LLM to evaluate (render) any Jinja2 template with optional variables. This can be used to test template expressions or render dynamic output for the user.
