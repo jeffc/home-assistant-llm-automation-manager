@@ -14,7 +14,75 @@ class CreateAutomationIntent(intent.IntentHandler):
     """Handle CreateAutomation intent."""
 
     intent_type = "CreateAutomation"
-    description = """Create or update an automation.
+
+    intent_type = "CreateAutomation"
+
+    @property
+    def description(self) -> str:
+        """Return the description of the tool with dynamic guidelines."""
+        entry = next(iter(self.hass.config_entries.async_entries(DOMAIN)), None)
+        options = entry.options if entry else {}
+        prompt_setting = options.get("prompt_one_time_vs_recurring", True)
+
+        guideline_parts = []
+        if prompt_setting:
+            guideline_parts.append(
+                "In your response to the user, you must be clear "
+                "about whether the automation is a one-time action "
+                "or runs every time."
+            )
+
+        guideline_parts.append(
+            "If it is unclear whether the user wants a one-time or "
+            "recurring automation, always ask the user for explicit "
+            "confirmation or clarification before creating it. "
+            "If the user says 'when' or 'next time', assume a "
+            "one-time automation (and use 'on_completion': 'delete_self' "
+            "or 'disable_self') unless they explicitly say otherwise. "
+            "If the user says 'every time' or 'whenever', that is a "
+            "cue to make a persistent automation that runs every time "
+            "(with 'on_completion': 'persist')."
+        )
+
+        guidelines = " ".join(guideline_parts)
+
+        # Categorization guidelines
+        categorize_guidelines = ""
+        if options.get("categorize_mode") == "auto_categorize":
+            import homeassistant.helpers.category_registry as cr
+            category_reg = cr.async_get(self.hass)
+            categories = list(
+                category_reg.async_list_categories(scope="automation")
+            )
+            cat_list = [f"- '{c.category_id}': {c.name}" for c in categories]
+
+            always_assign = options.get("always_assign_category", False)
+            assign_rule = (
+                "You MUST choose the most relevant category ID from the list "
+                "above and pass it in the 'category_id' slot. If no category "
+                "matches well, you must still pick the closest matching category."
+                if always_assign
+                else "Choose the most relevant category ID from the list "
+                "above and pass it in the 'category_id' slot. If no category "
+                "matches well, you may omit the 'category_id' parameter or "
+                "pass an empty string."
+            )
+
+            debug_rule = ""
+            if options.get("debug_mode", False):
+                debug_rule = (
+                    " Since LLM debug reasoning is enabled, you MUST explain "
+                    "in the 'reasoning' slot why you chose the selected category."
+                )
+
+            categorize_guidelines = (
+                "\n\nCATEGORIZATION GUIDELINE:\n"
+                "Available categories for automations:\n"
+                f"{chr(10).join(cat_list) if cat_list else '(No categories defined)'}\n"
+                f"{assign_rule}{debug_rule}"
+            )
+
+        part1 = """Create or update an automation.
 Exposes triggers, conditions, and actions.
 
 DECISION GUIDELINE: Creating an automation is appropriate when the user wants
@@ -28,14 +96,11 @@ built-in equivalent exists that can accomplish the goal. However, if templates
 are necessary for complex triggers, conditions, or other automation logic, you
 may write them. If you need to search or inspect the available Jinja2 template
 functions, filters, or tests registered in Home Assistant, you must call
-`GetTemplateHelperDocs`.
+`GetTemplateHelperDocs`."""
 
-ONE-TIME VS EVERY-TIME GUIDELINE: In your response to the user, you must be clear
-about whether the automation is a one-time action or runs every time. If the user
-says 'when' or 'next time', assume a one-time automation (and use 'on_completion':
-'delete_self' or 'disable_self') unless they explicitly say otherwise. If the user
-says 'every time' or 'whenever', that is a cue to make a persistent automation that
-runs every time (with 'on_completion': 'persist').
+        part2 = f"\n\nONE-TIME VS EVERY-TIME GUIDELINE: {guidelines}{categorize_guidelines}"
+
+        part3 = """
 
 REQUIRED FIELDS GUIDELINE: When calling this tool to create or update an automation,
 you MUST always include the trigger(s), any relevant condition(s), AND the action(s)
@@ -102,6 +167,8 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
   'state': 'below_horizon'}], 'then': [{'action': 'light.turn_on',
   'target': {'entity_id': 'light.hallway'}}]}]"""
 
+        return f"{part1}{part2}{part3}"
+
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize."""
         super().__init__()
@@ -131,6 +198,9 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
         if options.get("debug_mode", False):
             schema[vol.Optional("reasoning")] = cv.string
 
+        if options.get("categorize_mode") == "auto_categorize":
+            schema[vol.Optional("category_id")] = cv.string
+
         return schema
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
@@ -150,6 +220,7 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
             "mode",
             "on_completion",
             "validate_only",
+            "category_id",
         ):
             if key in slots:
                 service_data[key] = slots[key]["value"]
@@ -262,7 +333,50 @@ class CreateScriptIntent(intent.IntentHandler):
     """Handle CreateScript intent."""
 
     intent_type = "CreateScript"
-    description = """Create or update a script in Home Assistant. Scripts define a sequence
+
+    @property
+    def description(self) -> str:
+        """Return the description of the tool with dynamic guidelines."""
+        entry = next(iter(self.hass.config_entries.async_entries(DOMAIN)), None)
+        options = entry.options if entry else {}
+
+        # Categorization guidelines
+        categorize_guidelines = ""
+        if options.get("categorize_mode") == "auto_categorize":
+            import homeassistant.helpers.category_registry as cr
+            category_reg = cr.async_get(self.hass)
+            categories = list(
+                category_reg.async_list_categories(scope="script")
+            )
+            cat_list = [f"- '{c.category_id}': {c.name}" for c in categories]
+
+            always_assign = options.get("always_assign_category", False)
+            assign_rule = (
+                "You MUST choose the most relevant category ID from the list "
+                "above and pass it in the 'category_id' slot. If no category "
+                "matches well, you must still pick the closest matching category."
+                if always_assign
+                else "Choose the most relevant category ID from the list "
+                "above and pass it in the 'category_id' slot. If no category "
+                "matches well, you may omit the 'category_id' parameter or "
+                "pass an empty string."
+            )
+
+            debug_rule = ""
+            if options.get("debug_mode", False):
+                debug_rule = (
+                    " Since LLM debug reasoning is enabled, you MUST explain "
+                    "in the 'reasoning' slot why you chose the selected category."
+                )
+
+            categorize_guidelines = (
+                "\n\nCATEGORIZATION GUIDELINE:\n"
+                "Available categories for scripts:\n"
+                f"{chr(10).join(cat_list) if cat_list else '(No categories defined)'}\n"
+                f"{assign_rule}{debug_rule}"
+            )
+
+        part1 = """Create or update a script in Home Assistant. Scripts define a sequence
 of actions.
 
 GATHER THEN ACT GUIDELINE: You MUST NOT call this tool until all relevant details (such
@@ -276,7 +390,11 @@ built-in equivalent exists that can accomplish the goal. However, if templates
 are necessary for complex triggers, conditions, or other automation logic, you
 may write them. If you need to search or inspect the available Jinja2 template
 functions, filters, or tests registered in Home Assistant, you must call
-`GetTemplateHelperDocs`.
+`GetTemplateHelperDocs`."""
+
+        part2 = f"{categorize_guidelines}"
+
+        part3 = """
 
 ATOMICITY & ID PROPAGATION GUIDELINE: Do not call this tool incrementally to construct
 or update a script in parts. If you are modifying/updating an existing script created
@@ -320,6 +438,7 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
 - Choose logic: [{'choose': [{'conditions': [{'condition': 'state',
   'entity_id': 'binary_sensor.motion', 'state': 'on'}], 'sequence': [{'action': 'light.turn_on',
   'target': {'entity_id': 'light.living_room'}}]}]}]"""
+        return part1 + part2 + part3
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize."""
@@ -346,6 +465,9 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
         if options.get("debug_mode", False):
             schema[vol.Optional("reasoning")] = cv.string
 
+        if options.get("categorize_mode") == "auto_categorize":
+            schema[vol.Optional("category_id")] = cv.string
+
         return schema
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
@@ -363,6 +485,7 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
             "mode",
             "on_completion",
             "validate_only",
+            "category_id",
         ):
             if key in slots:
                 service_data[key] = slots[key]["value"]
@@ -841,6 +964,51 @@ class RenderTemplateIntent(intent.IntentHandler):
         return response
 
 
+class EnumerateIconsIntent(intent.IntentHandler):
+    """Handle EnumerateIcons intent."""
+
+    intent_type = "EnumerateIcons"
+    description = (
+        "Search or retrieve common Material Design Icons (MDI) used in Home Assistant. "
+        "Useful for selecting appropriate icons for automations and scripts."
+    )
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize."""
+        super().__init__()
+        self.hass = hass
+
+    @property
+    def slot_schema(self) -> dict | None:
+        """Return slot schema."""
+        return {
+            vol.Optional("search_term"): cv.string,
+        }
+
+    async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
+        """Handle the intent."""
+        slots = intent_obj.slots
+        search_term = slots["search_term"]["value"] if "search_term" in slots else None
+
+        response = intent_obj.create_response()
+
+        from . import async_enumerate_icons
+        icons = async_enumerate_icons(search_term)
+
+        if not icons:
+            response.async_set_speech("No matching icons found.")
+            return response
+
+        speech_parts = ["Here are the matching icons:"]
+        for item in icons:
+            speech_parts.append(
+                f"- `{item['icon']}` (Category: {item['category']}): {item['description']}"
+            )
+
+        response.async_set_speech("\n".join(speech_parts))
+        return response
+
+
 async def async_setup_intents(hass: HomeAssistant) -> None:
     """Register intents with the Home Assistant intent system."""
     intent.async_register(hass, CreateAutomationIntent(hass))
@@ -853,3 +1021,4 @@ async def async_setup_intents(hass: HomeAssistant) -> None:
     intent.async_register(hass, GetEntityTracesIntent(hass))
     intent.async_register(hass, GetTemplateHelperDocsIntent(hass))
     intent.async_register(hass, RenderTemplateIntent(hass))
+    intent.async_register(hass, EnumerateIconsIntent(hass))

@@ -87,6 +87,12 @@ create_automation:
       default: false
       selector:
         boolean:
+    icon:
+      name: Icon
+      description: Icon of the automation (e.g. mdi:lightbulb).
+      example: mdi:lightbulb
+      selector:
+        icon:
 
 delete_automation:
   name: Delete Automation
@@ -179,6 +185,12 @@ create_script:
       default: false
       selector:
         boolean:
+    icon:
+      name: Icon
+      description: Icon of the script (e.g. mdi:lightbulb).
+      example: mdi:lightbulb
+      selector:
+        icon:
 
 delete_script:
   name: Delete Script
@@ -264,3 +276,14 @@ render_template:
       description: Optional dictionary of variables to pass into the template environment.
       selector:
         object:
+
+enumerate_icons:
+  name: Enumerate Icons
+  description: Enumerate or search common home automation icons.
+  fields:
+    search_term:
+      name: Search Term
+      description: Search term to filter icon name, category, or description.
+      required: false
+      selector:
+        text:

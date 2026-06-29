@@ -65,6 +65,7 @@ CREATE_AUTOMATION_SCHEMA = vol.Schema(
         ),
         vol.Optional("expose_to_ai", default=False): cv.boolean,
         vol.Optional("validate_only", default=False): cv.boolean,
+        vol.Optional("category_id"): cv.string,
     }
 )
 
@@ -89,6 +90,7 @@ CREATE_SCRIPT_SCHEMA = vol.Schema(
         ),
         vol.Optional("expose_to_ai", default=False): cv.boolean,
         vol.Optional("validate_only", default=False): cv.boolean,
+        vol.Optional("category_id"): cv.string,
     }
 )
 
@@ -122,6 +124,12 @@ RENDER_TEMPLATE_SCHEMA = vol.Schema(
     {
         vol.Required("template"): cv.string,
         vol.Optional("variables"): dict,
+    }
+)
+
+ENUMERATE_ICONS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("search_term"): cv.string,
     }
 )
 
@@ -594,6 +602,217 @@ async def async_get_template_helper_docs(
     return result
 
 
+COMMON_ICONS = [
+    {
+        "icon": "mdi:lightbulb",
+        "description": "Standard light bulb, good for lights and lamps",
+        "category": "lights",
+    },
+    {
+        "icon": "mdi:lightbulb-outline",
+        "description": "Outlined light bulb, good for ambient lights",
+        "category": "lights",
+    },
+    {
+        "icon": "mdi:led-strip",
+        "description": "LED strip light, good for accent/strip lighting",
+        "category": "lights",
+    },
+    {
+        "icon": "mdi:switch",
+        "description": "Generic switch or toggle",
+        "category": "switches",
+    },
+    {
+        "icon": "mdi:power-socket-us",
+        "description": "Wall outlet/plug, good for smart plugs",
+        "category": "switches",
+    },
+    {
+        "icon": "mdi:thermostat",
+        "description": "Thermostat, good for climate controls",
+        "category": "climate",
+    },
+    {
+        "icon": "mdi:air-conditioner",
+        "description": "Air conditioner",
+        "category": "climate",
+    },
+    {
+        "icon": "mdi:fan",
+        "description": "Ceiling or floor fan",
+        "category": "climate",
+    },
+    {
+        "icon": "mdi:fire",
+        "description": "Flame, good for heaters or fireplaces",
+        "category": "climate",
+    },
+    {
+        "icon": "mdi:snowflake",
+        "description": "Snowflake, good for cooling/AC",
+        "category": "climate",
+    },
+    {
+        "icon": "mdi:door-closed",
+        "description": "Closed door, good for door sensors",
+        "category": "doors_windows",
+    },
+    {
+        "icon": "mdi:door-open",
+        "description": "Open door, good for entry alerts",
+        "category": "doors_windows",
+    },
+    {
+        "icon": "mdi:window-closed",
+        "description": "Closed window",
+        "category": "doors_windows",
+    },
+    {
+        "icon": "mdi:window-open",
+        "description": "Open window",
+        "category": "doors_windows",
+    },
+    {
+        "icon": "mdi:garage",
+        "description": "Closed garage door",
+        "category": "doors_windows",
+    },
+    {
+        "icon": "mdi:garage-open",
+        "description": "Open garage door",
+        "category": "doors_windows",
+    },
+    {
+        "icon": "mdi:blinds",
+        "description": "Window blinds or shades",
+        "category": "doors_windows",
+    },
+    {
+        "icon": "mdi:television",
+        "description": "TV/Television",
+        "category": "media",
+    },
+    {
+        "icon": "mdi:speaker",
+        "description": "Smart speaker or sound system",
+        "category": "media",
+    },
+    {
+        "icon": "mdi:volume-high",
+        "description": "Speaker icon with waves, good for volume/audio",
+        "category": "media",
+    },
+    {
+        "icon": "mdi:remote",
+        "description": "Remote control",
+        "category": "media",
+    },
+    {
+        "icon": "mdi:camera",
+        "description": "Security camera feed",
+        "category": "security",
+    },
+    {
+        "icon": "mdi:shield-home",
+        "description": "Home shield, good for alarm status",
+        "category": "security",
+    },
+    {
+        "icon": "mdi:lock",
+        "description": "Locked padlock, good for smart locks",
+        "category": "security",
+    },
+    {
+        "icon": "mdi:lock-open",
+        "description": "Unlocked padlock",
+        "category": "security",
+    },
+    {
+        "icon": "mdi:alarm-bell",
+        "description": "Ringing bell, good for alarms and alerts",
+        "category": "security",
+    },
+    {
+        "icon": "mdi:motion-sensor",
+        "description": "Motion sensor, good for occupancy detection",
+        "category": "security",
+    },
+    {
+        "icon": "mdi:account",
+        "description": "User/person profile, good for presence detection",
+        "category": "presence",
+    },
+    {
+        "icon": "mdi:walk",
+        "description": "Walking person, good for motion/presence",
+        "category": "presence",
+    },
+    {
+        "icon": "mdi:car",
+        "description": "Car, good for vehicle tracking/garage automation",
+        "category": "presence",
+    },
+    {
+        "icon": "mdi:home-assistant",
+        "description": "Home Assistant logo icon",
+        "category": "general",
+    },
+    {
+        "icon": "mdi:cog",
+        "description": "Gear, good for settings or system scripts",
+        "category": "general",
+    },
+    {
+        "icon": "mdi:bell",
+        "description": "Notification bell, good for announcements",
+        "category": "general",
+    },
+    {
+        "icon": "mdi:alert",
+        "description": "Warning triangle, good for error notifications",
+        "category": "general",
+    },
+    {
+        "icon": "mdi:check-circle",
+        "description": "Checkmark in circle, good for success scripts",
+        "category": "general",
+    },
+    {
+        "icon": "mdi:refresh",
+        "description": "Circular refresh arrows, good for reloads/updates",
+        "category": "general",
+    },
+    {
+        "icon": "mdi:clock",
+        "description": "Clock, good for time-based automations",
+        "category": "general",
+    },
+    {
+        "icon": "mdi:weather-sunny",
+        "description": "Sun, good for daytime/sunset automations",
+        "category": "general",
+    },
+]
+
+
+def async_enumerate_icons(
+    search_term: str | None = None,
+) -> list[dict[str, str]]:
+    """Return a list of common home automation icons matching the search term."""
+    if not search_term:
+        return COMMON_ICONS
+
+    term = search_term.lower()
+    return [
+        item
+        for item in COMMON_ICONS
+        if term in item["icon"].lower()
+        or term in item["description"].lower()
+        or term in item["category"].lower()
+    ]
+
+
 async def async_evaluate_template(
     hass: HomeAssistant,
     template_str: str,
@@ -627,6 +846,8 @@ async def _async_post_create_processing(
     config_key: str,
     expose_to_ai: bool,
     is_one_shot: bool = False,
+    category_id: str | None = None,
+    icon: str | None = None,
 ) -> None:
     """Assign tag and expose entity to AI helper."""
     ent_reg = er.async_get(hass)
@@ -700,6 +921,56 @@ async def _async_post_create_processing(
             _LOGGER.info("Exposed entity '%s' to AI (conversation)", entity_id)
         except Exception as err:
             _LOGGER.error("Failed to expose entity '%s' to AI: %s", entity_id, err)
+
+    # Assign category if configured
+    options = entry.options if entry else {}
+    target_category_id = None
+    categorize_mode = options.get("categorize_mode", "leave_uncategorized")
+
+    if categorize_mode == "put_in_specified":
+        if domain == AUTOMATION_DOMAIN:
+            target_category_id = options.get("specified_automation_category")
+        elif domain == SCRIPT_DOMAIN:
+            target_category_id = options.get("specified_script_category")
+    elif categorize_mode == "auto_categorize" and category_id:
+        target_category_id = category_id
+
+    if target_category_id:
+        import homeassistant.helpers.category_registry as cr
+        category_reg = cr.async_get(hass)
+        category = category_reg.async_get_category(
+            scope=domain, category_id=target_category_id
+        )
+        if category:
+            ent_reg.async_update_entity(
+                entity_id,
+                categories={domain: target_category_id}
+            )
+            _LOGGER.info(
+                "Assigned category '%s' (%s) to entity '%s'",
+                category.name,
+                target_category_id,
+                entity_id,
+            )
+        else:
+            _LOGGER.warning(
+                "Category ID '%s' not found for scope '%s', skipped assignment",
+                target_category_id,
+                domain,
+            )
+
+    # Set icon if configured
+    if icon:
+        try:
+            ent_reg.async_update_entity(entity_id, icon=icon)
+            _LOGGER.info("Set icon '%s' for entity '%s'", icon, entity_id)
+        except Exception as err:
+            _LOGGER.warning(
+                "Failed to set icon '%s' for entity '%s': %s",
+                icon,
+                entity_id,
+                err,
+            )
 
 def _verify_deletion_restriction(
     hass: HomeAssistant, domain: str, config_key: str
@@ -945,12 +1216,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Assign tag and expose if configured
             is_one_shot = on_completion != "persist"
             expose_to_ai = call.data.get("expose_to_ai", False)
+            category_id = call.data.get("category_id")
+            icon = call.data.get("icon")
             await _async_post_create_processing(
                 hass,
                 AUTOMATION_DOMAIN,
                 config_key,
                 expose_to_ai,
                 is_one_shot=is_one_shot,
+                category_id=category_id,
+                icon=icon,
             )
 
             return {"success": True, "id": config_key}
@@ -1165,7 +1440,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     config_data.update(parsed_config)
 
             # Override or set individual fields if provided
-            for key in ("alias", "description", "sequence", "mode"):
+            for key in ("alias", "description", "sequence", "mode", "icon"):
                 if key in call.data:
                     config_data[key] = _parse_json_fallback(call.data[key])
 
@@ -1267,12 +1542,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Assign tag and expose if configured
             is_one_shot = on_completion != "persist"
             expose_to_ai = call.data.get("expose_to_ai", False)
+            category_id = call.data.get("category_id")
+            icon = call.data.get("icon")
             await _async_post_create_processing(
                 hass,
                 SCRIPT_DOMAIN,
                 config_key,
                 expose_to_ai,
                 is_one_shot=is_one_shot,
+                category_id=category_id,
+                icon=icon,
             )
 
             return {"success": True, "id": config_key}
@@ -1569,6 +1848,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.ONLY,
     )
 
+    async def async_enumerate_icons_service(call: ServiceCall) -> ServiceResponse:
+        """Enumerate or search common home automation icons."""
+        search_term = call.data.get("search_term")
+        results = async_enumerate_icons(search_term)
+        return {"icons": results}
+
+    hass.services.async_register(
+        DOMAIN,
+        "enumerate_icons",
+        async_enumerate_icons_service,
+        schema=ENUMERATE_ICONS_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
     # Setup intents for LLM tools conditionally
     expose_llm_tools = entry.options.get("expose_llm_tools", True)
     if expose_llm_tools:
@@ -1595,6 +1888,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "get_entity_traces",
         "get_template_helper_docs",
         "render_template",
+        "enumerate_icons",
     ):
         hass.services.async_remove(DOMAIN, service)
 
@@ -1608,6 +1902,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "GetEntityTraces",
         "GetTemplateHelperDocs",
         "RenderTemplate",
+        "EnumerateIcons",
     ):
         try:
             intent.async_remove(hass, intent_type)

@@ -79,11 +79,61 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             self._options_data.update(user_input)
             return self.async_create_entry(title="", data=self._options_data)
 
+        import homeassistant.helpers.category_registry as cr
+        category_reg = cr.async_get(self.hass)
+
+        automation_categories = {
+            cat.category_id: cat.name
+            for cat in category_reg.async_list_categories(scope="automation")
+        }
+        script_categories = {
+            cat.category_id: cat.name
+            for cat in category_reg.async_list_categories(scope="script")
+        }
+
+        # Add a default/no-category option
+        automation_cat_options = {"": "None"}
+        automation_cat_options.update(automation_categories)
+
+        script_cat_options = {"": "None"}
+        script_cat_options.update(script_categories)
+
+        categorize_modes = {
+            "leave_uncategorized": "Leave uncategorized",
+            "put_in_specified": "Put in specified category",
+            "auto_categorize": "Auto-categorize",
+        }
+
         from homeassistant.helpers import selector
 
         # Build schema for all configurable options with defaults.
         schema = vol.Schema(
             {
+                # Categorization modes
+                vol.Optional(
+                    "categorize_mode",
+                    default=self._options_data.get(
+                        "categorize_mode", "leave_uncategorized"
+                    ),
+                ): vol.In(categorize_modes),
+                vol.Optional(
+                    "specified_automation_category",
+                    default=self._options_data.get(
+                        "specified_automation_category", ""
+                    ),
+                ): vol.In(automation_cat_options),
+                vol.Optional(
+                    "specified_script_category",
+                    default=self._options_data.get(
+                        "specified_script_category", ""
+                    ),
+                ): vol.In(script_cat_options),
+                vol.Optional(
+                    "always_assign_category",
+                    default=self._options_data.get(
+                        "always_assign_category", False
+                    ),
+                ): bool,
                 # Tag (label) auto-assigned to all created entities.
                 vol.Optional(
                     "tag",
@@ -119,6 +169,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     "expose_llm_tools",
                     default=self._options_data.get("expose_llm_tools", True),
+                ): bool,
+                # Prompt LLM to be explicit about one-time vs recurring.
+                vol.Optional(
+                    "prompt_one_time_vs_recurring",
+                    default=self._options_data.get(
+                        "prompt_one_time_vs_recurring", True
+                    ),
                 ): bool,
                 # Enable debug mode to log and return LLM reasoning.
                 vol.Optional(
