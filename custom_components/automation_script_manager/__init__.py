@@ -87,9 +87,7 @@ CREATE_SCRIPT_SCHEMA = vol.Schema(
         vol.Optional("icon"): cv.string,
         vol.Optional("sequence"): cv.match_all,
         vol.Optional("mode"): cv.string,
-        vol.Optional("on_completion", default="persist"): vol.In(
-            ["delete_self", "persist"]
-        ),
+        vol.Optional("on_completion", default="persist"): vol.In(["delete_self", "persist"]),
         vol.Optional("expose_to_ai", default=False): cv.boolean,
         vol.Optional("validate_only", default=False): cv.boolean,
         vol.Optional("category_id"): cv.string,
@@ -163,6 +161,7 @@ def _parse_json_fallback(value: Any) -> Any:
                     pass
     return value
 
+
 def _extract_entity_ids(data: Any) -> set[str]:
     """Recursively extract all entity IDs from triggers, conditions, or actions."""
     entity_ids = set()
@@ -202,8 +201,8 @@ def _extract_actions(data: Any) -> set[str]:
             if key in ("action", "service"):
                 if isinstance(value, str) and "." in value:
                     actions.add(value)
-            else:
-                actions.update(_extract_actions(value))
+            # Always recurse into all dictionary values to find nested actions
+            actions.update(_extract_actions(value))
     elif isinstance(data, list):
         for item in data:
             actions.update(_extract_actions(item))
@@ -216,16 +215,8 @@ def is_action_allowed_by_regex(
     """Check action name against allow/deny lists using regular expressions."""
     import re
 
-    allow_lines = [
-        line.strip()
-        for line in allow_regexes_str.splitlines()
-        if line.strip()
-    ]
-    disallow_lines = [
-        line.strip()
-        for line in disallow_regexes_str.splitlines()
-        if line.strip()
-    ]
+    allow_lines = [line.strip() for line in allow_regexes_str.splitlines() if line.strip()]
+    disallow_lines = [line.strip() for line in disallow_regexes_str.splitlines() if line.strip()]
 
     has_allow = len(allow_lines) > 0
     has_disallow = len(disallow_lines) > 0
@@ -355,14 +346,10 @@ def is_action_allowed_with_reason(
     disallow_regexes = options.get("disallow_regexes", "")
 
     # Delegate the evaluation to the regex check function.
-    return is_action_allowed_by_regex_with_reason(
-        action, allow_regexes, disallow_regexes
-    )
+    return is_action_allowed_by_regex_with_reason(action, allow_regexes, disallow_regexes)
 
 
-def is_action_allowed(
-    domain: str, service: str, options: dict[str, Any]
-) -> bool:
+def is_action_allowed(domain: str, service: str, options: dict[str, Any]) -> bool:
     """Resolve allowed/denied action based on config options."""
     allowed, _ = is_action_allowed_with_reason(domain, service, options)
     return allowed
@@ -384,6 +371,7 @@ async def async_fetch_entity_traces(
 
     # Check if trace component is active
     from homeassistant.components.trace import DATA_TRACE
+
     if DATA_TRACE not in hass.data:
         raise HomeAssistantError("Trace component is not active or loaded")
 
@@ -397,9 +385,7 @@ async def async_fetch_entity_traces(
     try:
         traces = await async_list_traces(hass, domain, entity_id)
     except Exception as err:
-        raise HomeAssistantError(
-            f"Failed to list traces for {entity_id}: {err}"
-        ) from err
+        raise HomeAssistantError(f"Failed to list traces for {entity_id}: {err}") from err
 
     # Sort traces descending by start timestamp (newest first)
     def get_start_time(t: dict[str, Any]) -> datetime.datetime:
@@ -424,12 +410,14 @@ async def async_fetch_entity_traces(
                 start_time = dt.isoformat()
             else:
                 start_time = str(dt)
-        recent_runs.append({
-            "run_id": t.get("run_id"),
-            "state": t.get("state"),
-            "start_time": start_time,
-            "error": t.get("error"),
-        })
+        recent_runs.append(
+            {
+                "run_id": t.get("run_id"),
+                "state": t.get("state"),
+                "start_time": start_time,
+                "error": t.get("error"),
+            }
+        )
 
     # Find detailed run
     detailed_run_data = None
@@ -439,9 +427,7 @@ async def async_fetch_entity_traces(
 
     if selected_run_id:
         try:
-            detailed_run_data = await async_get_trace(
-                hass, entity_id, selected_run_id
-            )
+            detailed_run_data = await async_get_trace(hass, entity_id, selected_run_id)
         except KeyError:
             pass
         except Exception as err:
@@ -489,9 +475,7 @@ async def async_fetch_entity_traces(
                         if val.tzinfo is None:
                             return val.replace(tzinfo=datetime.timezone.utc)
                         return val
-                    return datetime.datetime(
-                        1, 1, 1, tzinfo=datetime.timezone.utc
-                    )
+                    return datetime.datetime(1, 1, 1, tzinfo=datetime.timezone.utc)
 
                 steps.append((get_t_val(t_val), step_info))
 
@@ -530,9 +514,7 @@ def _validate_templates(hass: HomeAssistant, data: Any) -> None:
             try:
                 Template(data, hass).ensure_valid()
             except Exception as err:
-                raise ValueError(
-                    f"Invalid Jinja2 template '{data}': {err}"
-                ) from err
+                raise ValueError(f"Invalid Jinja2 template '{data}': {err}") from err
 
 
 async def async_get_template_helper_docs(
@@ -592,11 +574,13 @@ async def async_get_template_helper_docs(
                 if term not in name.lower() and term not in doc.lower():
                     continue
 
-            result[cat_name].append({
-                "name": name,
-                "signature": sig,
-                "description": doc,
-            })
+            result[cat_name].append(
+                {
+                    "name": name,
+                    "signature": sig,
+                    "description": doc,
+                }
+            )
 
     # Sort results alphabetically
     for key in result:
@@ -814,6 +798,7 @@ def async_get_common_icons(
                 active_icon_counts[icon] = active_icon_counts.get(icon, 0) + 1
 
         from homeassistant.helpers import entity_registry as er
+
         ent_reg = er.async_get(hass)
         if hasattr(ent_reg, "entities"):
             for entry in ent_reg.entities.values():
@@ -891,13 +876,12 @@ async def async_evaluate_template(
 ) -> str:
     """Evaluate a Jinja2 template and return the rendered string result."""
     from homeassistant.helpers.template import Template
+
     try:
         res = Template(template_str, hass).async_render(variables)
         return str(res)
     except Exception as err:
-        raise HomeAssistantError(
-            f"Failed to render template: {err}"
-        ) from err
+        raise HomeAssistantError(f"Failed to render template: {err}") from err
 
 
 def _read_yaml(path: str) -> Any:
@@ -906,10 +890,12 @@ def _read_yaml(path: str) -> Any:
         return None
     return load_yaml(path)
 
+
 def _write_yaml(path: str, data: Any) -> None:
     """Write YAML helper atomically."""
     contents = dump(data)
     write_utf8_file_atomic(path, contents)
+
 
 async def _async_post_create_processing(
     hass: HomeAssistant,
@@ -965,11 +951,7 @@ async def _async_post_create_processing(
                 except ValueError:
                     # Fallback if label is already in use by name (concurrency)
                     label = next(
-                        (
-                            l
-                            for l in label_reg.labels.values()
-                            if l.name.lower() == t.lower()
-                        ),
+                        (l for l in label_reg.labels.values() if l.name.lower() == t.lower()),
                         None,
                     )
             if label:
@@ -988,6 +970,7 @@ async def _async_post_create_processing(
             from homeassistant.components.homeassistant.exposed_entities import (
                 async_expose_entity,
             )
+
             async_expose_entity(hass, "conversation", entity_id, True)
             _LOGGER.info("Exposed entity '%s' to AI (conversation)", entity_id)
         except Exception as err:
@@ -1008,15 +991,11 @@ async def _async_post_create_processing(
 
     if target_category_id:
         import homeassistant.helpers.category_registry as cr
+
         category_reg = cr.async_get(hass)
-        category = category_reg.async_get_category(
-            scope=domain, category_id=target_category_id
-        )
+        category = category_reg.async_get_category(scope=domain, category_id=target_category_id)
         if category:
-            ent_reg.async_update_entity(
-                entity_id,
-                categories={domain: target_category_id}
-            )
+            ent_reg.async_update_entity(entity_id, categories={domain: target_category_id})
             _LOGGER.info(
                 "Assigned category '%s' (%s) to entity '%s'",
                 category.name,
@@ -1043,9 +1022,8 @@ async def _async_post_create_processing(
                 err,
             )
 
-def _verify_deletion_restriction(
-    hass: HomeAssistant, domain: str, config_key: str
-) -> None:
+
+def _verify_deletion_restriction(hass: HomeAssistant, domain: str, config_key: str) -> None:
     """Verify if deletion is restricted based on options."""
     entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
     if not entry:
@@ -1083,9 +1061,11 @@ def _verify_deletion_restriction(
             f"does not have the required tag '{tag}'"
         )
 
+
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up the Automation & Script Manager component."""
     return True
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Automation & Script Manager from a config entry."""
@@ -1165,16 +1145,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if on_completion == "delete_self":
                     completion_action = {
                         "action": "automation_script_manager.delete_automation",
-                        "data": {
-                            "entity_id": "{{ this.entity_id }}"
-                        }
+                        "data": {"entity_id": "{{ this.entity_id }}"},
                     }
                 elif on_completion == "disable_self":
                     completion_action = {
                         "action": "automation.turn_off",
-                        "target": {
-                            "entity_id": "{{ this.entity_id }}"
-                        }
+                        "target": {"entity_id": "{{ this.entity_id }}"},
                     }
 
                 # Pop 'actions' if present and unify into 'action' list
@@ -1188,13 +1164,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             for ent in entity_ids:
                 if "." not in ent:
                     raise ValueError(f"Entity ID '{ent}' is invalid")
-                if (
-                    hass.states.get(ent) is None
-                    and ent_reg.async_get(ent) is None
-                ):
-                    raise ValueError(
-                        f"Entity ID '{ent}' does not exist in Home Assistant"
-                    )
+                if hass.states.get(ent) is None and ent_reg.async_get(ent) is None:
+                    raise ValueError(f"Entity ID '{ent}' does not exist in Home Assistant")
 
             # Extract and validate all action names referenced
             actions_list = _extract_actions(config_data)
@@ -1205,21 +1176,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             for act in actions_list:
                 if "." not in act:
-                    raise ValueError(
-                        f"Action '{act}' must be in the format 'domain.action'"
-                    )
+                    raise ValueError(f"Action '{act}' must be in the format 'domain.action'")
                 domain, service = act.split(".", 1)
-                if (
-                    domain not in domain_services
-                    or service not in domain_services[domain]
-                ):
-                    raise ValueError(
-                        f"Action '{act}' is not registered in Home Assistant"
-                    )
+                if domain not in domain_services or service not in domain_services[domain]:
+                    raise ValueError(f"Action '{act}' is not registered in Home Assistant")
                 if not is_action_allowed(domain, service, options):
-                    raise ValueError(
-                        f"Action '{act}' is blocked by security policy"
-                    )
+                    raise ValueError(f"Action '{act}' is blocked by security policy")
 
             # Validate any template syntax recursively
             _validate_templates(hass, config_data)
@@ -1325,9 +1287,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Verify deletion restriction
             _verify_deletion_restriction(hass, AUTOMATION_DOMAIN, config_key)
 
-            disable_instead_of_delete = entry.options.get(
-                "disable_instead_of_delete", False
-            )
+            disable_instead_of_delete = entry.options.get("disable_instead_of_delete", False)
             would_be_deleted_tag = entry.options.get(
                 "would_be_deleted_tag", "would-be-deleted"
             ).strip()
@@ -1345,18 +1305,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                     found = False
                     for index, cur_value in enumerate(current):
-                        if (
-                            isinstance(cur_value, dict)
-                            and cur_value.get("id") == config_key
-                        ):
+                        if isinstance(cur_value, dict) and cur_value.get("id") == config_key:
                             cur_value["initial_state"] = False
                             found = True
                             break
 
                     if not found:
-                        raise ValueError(
-                            f"Automation with ID '{config_key}' not found"
-                        )
+                        raise ValueError(f"Automation with ID '{config_key}' not found")
 
                     await hass.async_add_executor_job(_write_yaml, path, current)
 
@@ -1380,21 +1335,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     # Add override tag if configured
                     if would_be_deleted_tag:
                         label_reg = lr.async_get(hass)
-                        label = label_reg.async_get_label_by_name(
-                            would_be_deleted_tag
-                        )
+                        label = label_reg.async_get_label_by_name(would_be_deleted_tag)
                         if label is None:
                             try:
-                                label = label_reg.async_create(
-                                    would_be_deleted_tag
-                                )
+                                label = label_reg.async_create(would_be_deleted_tag)
                             except ValueError:
                                 label = next(
                                     (
                                         l
                                         for l in label_reg.labels.values()
-                                        if l.name.lower()
-                                        == would_be_deleted_tag.lower()
+                                        if l.name.lower() == would_be_deleted_tag.lower()
                                     ),
                                     None,
                                 )
@@ -1403,9 +1353,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             reg_entry = ent_reg.async_get(reg_entity_id)
                             if reg_entry:
                                 new_labels = reg_entry.labels | {label_id}
-                                ent_reg.async_update_entity(
-                                    reg_entity_id, labels=new_labels
-                                )
+                                ent_reg.async_update_entity(reg_entity_id, labels=new_labels)
 
                 _LOGGER.info(
                     "Delete override: Disabled automation '%s' instead of deleting",
@@ -1533,9 +1481,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if on_completion == "delete_self":
                     completion_action = {
                         "action": "automation_script_manager.delete_script",
-                        "data": {
-                            "entity_id": "{{ this.entity_id }}"
-                        }
+                        "data": {"entity_id": "{{ this.entity_id }}"},
                     }
 
                 sequence.append(completion_action)
@@ -1547,13 +1493,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             for ent in entity_ids:
                 if "." not in ent:
                     raise ValueError(f"Entity ID '{ent}' is invalid")
-                if (
-                    hass.states.get(ent) is None
-                    and ent_reg.async_get(ent) is None
-                ):
-                    raise ValueError(
-                        f"Entity ID '{ent}' does not exist in Home Assistant"
-                    )
+                if hass.states.get(ent) is None and ent_reg.async_get(ent) is None:
+                    raise ValueError(f"Entity ID '{ent}' does not exist in Home Assistant")
 
             # Extract and validate all action names referenced
             actions_list = _extract_actions(config_data)
@@ -1564,21 +1505,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             for act in actions_list:
                 if "." not in act:
-                    raise ValueError(
-                        f"Action '{act}' must be in the format 'domain.action'"
-                    )
+                    raise ValueError(f"Action '{act}' must be in the format 'domain.action'")
                 domain, service = act.split(".", 1)
-                if (
-                    domain not in domain_services
-                    or service not in domain_services[domain]
-                ):
-                    raise ValueError(
-                        f"Action '{act}' is not registered in Home Assistant"
-                    )
+                if domain not in domain_services or service not in domain_services[domain]:
+                    raise ValueError(f"Action '{act}' is not registered in Home Assistant")
                 if not is_action_allowed(domain, service, options):
-                    raise ValueError(
-                        f"Action '{act}' is blocked by security policy"
-                    )
+                    raise ValueError(f"Action '{act}' is blocked by security policy")
 
             # Validate any template syntax recursively
             _validate_templates(hass, config_data)
@@ -1651,9 +1583,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Verify deletion restriction
             _verify_deletion_restriction(hass, SCRIPT_DOMAIN, config_key)
 
-            disable_instead_of_delete = entry.options.get(
-                "disable_instead_of_delete", False
-            )
+            disable_instead_of_delete = entry.options.get("disable_instead_of_delete", False)
             would_be_deleted_tag = entry.options.get(
                 "would_be_deleted_tag", "would-be-deleted"
             ).strip()
@@ -1683,10 +1613,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         "action": "persistent_notification.create",
                         "data": {
                             "title": "Disabled Script Called",
-                            "message": (
-                                f"Warning: Disabled script "
-                                f"'{config_key}' was called."
-                            ),
+                            "message": (f"Warning: Disabled script " f"'{config_key}' was called."),
                         },
                     }
                     stop_action = {
@@ -1721,21 +1648,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     # Add override tag if configured
                     if would_be_deleted_tag:
                         label_reg = lr.async_get(hass)
-                        label = label_reg.async_get_label_by_name(
-                            would_be_deleted_tag
-                        )
+                        label = label_reg.async_get_label_by_name(would_be_deleted_tag)
                         if label is None:
                             try:
-                                label = label_reg.async_create(
-                                    would_be_deleted_tag
-                                )
+                                label = label_reg.async_create(would_be_deleted_tag)
                             except ValueError:
                                 label = next(
                                     (
                                         l
                                         for l in label_reg.labels.values()
-                                        if l.name.lower()
-                                        == would_be_deleted_tag.lower()
+                                        if l.name.lower() == would_be_deleted_tag.lower()
                                     ),
                                     None,
                                 )
@@ -1744,9 +1666,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             reg_entry = ent_reg.async_get(reg_entity_id)
                             if reg_entry:
                                 new_labels = reg_entry.labels | {label_id}
-                                ent_reg.async_update_entity(
-                                    reg_entity_id, labels=new_labels
-                                )
+                                ent_reg.async_update_entity(reg_entity_id, labels=new_labels)
 
                 _LOGGER.info(
                     "Delete override: Disabled script '%s' instead of deleting",
@@ -1772,9 +1692,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Remove from entity registry
             ent_reg = er.async_get(hass)
-            reg_entity_id = ent_reg.async_get_entity_id(
-                SCRIPT_DOMAIN, SCRIPT_DOMAIN, config_key
-            )
+            reg_entity_id = ent_reg.async_get_entity_id(SCRIPT_DOMAIN, SCRIPT_DOMAIN, config_key)
             if reg_entity_id is not None:
                 ent_reg.async_remove(reg_entity_id)
 
@@ -1827,9 +1745,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         for dom, svcs in sorted(domain_services.items()):
             for svc in sorted(svcs.keys()):
-                is_allowed, reason = is_action_allowed_with_reason(
-                    dom, svc, entry.options
-                )
+                is_allowed, reason = is_action_allowed_with_reason(dom, svc, entry.options)
                 if is_allowed:
                     if dom not in allowed:
                         allowed[dom] = {} if verbose else []
@@ -1862,9 +1778,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             return await async_fetch_entity_traces(hass, entity_id, run_id)
         except Exception as err:
-            raise HomeAssistantError(
-                f"Failed to fetch traces: {err}"
-            ) from err
+            raise HomeAssistantError(f"Failed to fetch traces: {err}") from err
 
     hass.services.async_register(
         DOMAIN,
@@ -1881,13 +1795,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         search_term = call.data.get("search_term")
         only_custom = call.data.get("only_custom", True)
         try:
-            return await async_get_template_helper_docs(
-                hass, search_term, only_custom
-            )
+            return await async_get_template_helper_docs(hass, search_term, only_custom)
         except Exception as err:
-            raise HomeAssistantError(
-                f"Failed to fetch template helper docs: {err}"
-            ) from err
+            raise HomeAssistantError(f"Failed to fetch template helper docs: {err}") from err
 
     hass.services.async_register(
         DOMAIN,
@@ -1902,14 +1812,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         template_str = call.data["template"]
         variables = call.data.get("variables")
         try:
-            rendered = await async_evaluate_template(
-                hass, template_str, variables
-            )
+            rendered = await async_evaluate_template(hass, template_str, variables)
             return {"result": rendered}
         except Exception as err:
-            raise HomeAssistantError(
-                f"Template rendering failed: {err}"
-            ) from err
+            raise HomeAssistantError(f"Template rendering failed: {err}") from err
 
     hass.services.async_register(
         DOMAIN,
@@ -1938,6 +1844,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     expose_llm_tools = entry.options.get("expose_llm_tools", True)
     if expose_llm_tools:
         from .intent import async_setup_intents
+
         await async_setup_intents(hass)
 
     # Register update listener for option changes
@@ -1945,9 +1852,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return True
 
+
 async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Update options listener, reloads the config entry to apply changes."""
     await hass.config_entries.async_reload(entry.entry_id)
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
@@ -1966,6 +1875,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Unregister intents
     from homeassistant.helpers import intent
+
     for intent_type in (
         "CreateAutomation",
         "DeleteAutomation",
