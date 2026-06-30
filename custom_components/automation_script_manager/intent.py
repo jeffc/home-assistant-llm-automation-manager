@@ -10,6 +10,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class CreateAutomationIntent(intent.IntentHandler):
     """Handle CreateAutomation intent."""
 
@@ -50,10 +51,9 @@ class CreateAutomationIntent(intent.IntentHandler):
         categorize_guidelines = ""
         if options.get("categorize_mode") == "auto_categorize":
             import homeassistant.helpers.category_registry as cr
+
             category_reg = cr.async_get(self.hass)
-            categories = list(
-                category_reg.async_list_categories(scope="automation")
-            )
+            categories = list(category_reg.async_list_categories(scope="automation"))
             cat_list = [f"- '{c.category_id}': {c.name}" for c in categories]
 
             always_assign = options.get("always_assign_category", False)
@@ -206,9 +206,7 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
             vol.Optional("condition"): vol.Any(list, dict),
             vol.Required("action"): vol.Any(list, dict),
             vol.Optional("mode"): cv.string,
-            vol.Optional("on_completion"): vol.In(
-                ["delete_self", "disable_self", "persist"]
-            ),
+            vol.Optional("on_completion"): vol.In(["delete_self", "disable_self", "persist"]),
             vol.Optional("validate_only"): cv.boolean,
             vol.Optional("reasoning"): cv.string,
             vol.Optional("category_id"): cv.string,
@@ -250,6 +248,7 @@ EXAMPLES OF VALID ACTIONS IN AUTOMATION action LIST:
 
         # Append generation timestamp and optional reasoning to the description
         import datetime
+
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         generated_info = f"Generated on {now_str}."
 
@@ -300,8 +299,7 @@ class DeleteAutomationIntent(intent.IntentHandler):
 
     intent_type = "DeleteAutomation"
     description = (
-        "Delete an automation from Home Assistant. Restricts to specific "
-        "tag if configured."
+        "Delete an automation from Home Assistant. Restricts to specific " "tag if configured."
     )
 
     def __init__(self, hass: HomeAssistant) -> None:
@@ -365,10 +363,9 @@ class CreateScriptIntent(intent.IntentHandler):
         categorize_guidelines = ""
         if options.get("categorize_mode") == "auto_categorize":
             import homeassistant.helpers.category_registry as cr
+
             category_reg = cr.async_get(self.hass)
-            categories = list(
-                category_reg.async_list_categories(scope="script")
-            )
+            categories = list(category_reg.async_list_categories(scope="script"))
             cat_list = [f"- '{c.category_id}': {c.name}" for c in categories]
 
             always_assign = options.get("always_assign_category", False)
@@ -536,6 +533,7 @@ EXAMPLES OF VALID ACTIONS IN SEQUENCE:
 
         # Append generation timestamp and optional reasoning to the description
         import datetime
+
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         generated_info = f"Generated on {now_str}."
 
@@ -638,8 +636,7 @@ class GetExposedNotifyEntitiesIntent(intent.IntentHandler):
 
     intent_type = "GetExposedNotifyEntities"
     description = (
-        "Get the list of notify entities that are exposed to the "
-        "AI/conversation assistant."
+        "Get the list of notify entities that are exposed to the " "AI/conversation assistant."
     )
 
     def __init__(self, hass: HomeAssistant) -> None:
@@ -653,6 +650,7 @@ class GetExposedNotifyEntitiesIntent(intent.IntentHandler):
 
         try:
             from homeassistant.components.homeassistant.exposed_entities import async_should_expose
+
             has_expose_helper = True
         except ImportError:
             has_expose_helper = False
@@ -674,8 +672,7 @@ class GetExposedNotifyEntitiesIntent(intent.IntentHandler):
             )
         else:
             response.async_set_speech(
-                "No notify entities are currently exposed to the "
-                "AI/conversation assistant."
+                "No notify entities are currently exposed to the " "AI/conversation assistant."
             )
 
         return response
@@ -700,6 +697,7 @@ class EnumerateActionsIntent(intent.IntentHandler):
         hass = intent_obj.hass
 
         from homeassistant.helpers.service import async_get_all_descriptions
+
         descriptions = await async_get_all_descriptions(hass)
 
         entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
@@ -709,6 +707,7 @@ class EnumerateActionsIntent(intent.IntentHandler):
         for domain, services in sorted(descriptions.items()):
             for service_name, service_info in sorted(services.items()):
                 from . import is_action_allowed
+
                 if not is_action_allowed(domain, service_name, options):
                     continue
                 desc = service_info.get("description", "No description available.")
@@ -717,9 +716,7 @@ class EnumerateActionsIntent(intent.IntentHandler):
         response = intent_obj.create_response()
         if lines:
             actions_list = "\n".join(lines)
-            response.async_set_speech(
-                f"Here are all available actions:\n{actions_list}"
-            )
+            response.async_set_speech(f"Here are all available actions:\n{actions_list}")
         else:
             response.async_set_speech("No actions found.")
 
@@ -762,15 +759,14 @@ class GetActionDetailsIntent(intent.IntentHandler):
         domain, service = action_name.split(".", 1)
 
         from homeassistant.helpers.service import async_get_all_descriptions
+
         descriptions = await async_get_all_descriptions(hass)
 
         response = intent_obj.create_response()
 
         domain_services = descriptions.get(domain)
         if not domain_services or service not in domain_services:
-            response.async_set_speech(
-                f"Action '{action_name}' was not found."
-            )
+            response.async_set_speech(f"Action '{action_name}' was not found.")
             return response
 
         service_info = domain_services[service]
@@ -789,9 +785,7 @@ class GetActionDetailsIntent(intent.IntentHandler):
                 field_required = "Required" if field_info.get("required") else "Optional"
                 field_example = field_info.get("example")
                 example_str = f" (Example: {field_example})" if field_example is not None else ""
-                speech_parts.append(
-                    f"- {field_name} ({field_required}): {field_desc}{example_str}"
-                )
+                speech_parts.append(f"- {field_name} ({field_required}): {field_desc}{example_str}")
         else:
             speech_parts.append("This action takes no arguments.")
 
@@ -835,6 +829,7 @@ class GetEntityTracesIntent(intent.IntentHandler):
         from homeassistant.components.homeassistant.exposed_entities import (
             async_should_expose,
         )
+
         if not async_should_expose(hass, "conversation", entity_id):
             response.async_set_speech(
                 f"Entity '{entity_id}' is not exposed to the AI assistant. "
@@ -843,12 +838,11 @@ class GetEntityTracesIntent(intent.IntentHandler):
             return response
 
         from . import async_fetch_entity_traces
+
         try:
             traces_data = await async_fetch_entity_traces(hass, entity_id, run_id)
         except Exception as err:
-            response.async_set_speech(
-                f"Failed to fetch execution traces for '{entity_id}': {err}"
-            )
+            response.async_set_speech(f"Failed to fetch execution traces for '{entity_id}': {err}")
             return response
 
         recent_runs = traces_data.get("recent_runs", [])
@@ -868,9 +862,7 @@ class GetEntityTracesIntent(intent.IntentHandler):
             speech_parts.append("\nNo recent runs found.")
 
         if detailed_run:
-            speech_parts.append(
-                f"\nDetailed steps for Run ID {detailed_run['run_id']}:"
-            )
+            speech_parts.append(f"\nDetailed steps for Run ID {detailed_run['run_id']}:")
             steps = detailed_run.get("steps", [])
             if steps:
                 for step in steps:
@@ -916,26 +908,17 @@ class GetTemplateHelperDocsIntent(intent.IntentHandler):
         hass = intent_obj.hass
         slots = intent_obj.slots
 
-        search_term = (
-            slots["search_term"]["value"].strip()
-            if "search_term" in slots
-            else None
-        )
-        only_custom = (
-            slots["only_custom"]["value"] if "only_custom" in slots else True
-        )
+        search_term = slots["search_term"]["value"].strip() if "search_term" in slots else None
+        only_custom = slots["only_custom"]["value"] if "only_custom" in slots else True
 
         response = intent_obj.create_response()
 
         from . import async_get_template_helper_docs
+
         try:
-            docs = await async_get_template_helper_docs(
-                hass, search_term, only_custom
-            )
+            docs = await async_get_template_helper_docs(hass, search_term, only_custom)
         except Exception as err:
-            response.async_set_speech(
-                f"Failed to fetch template helper documentation: {err}"
-            )
+            response.async_set_speech(f"Failed to fetch template helper documentation: {err}")
             return response
 
         speech_parts = ["Jinja2 Template Helper Documentation:"]
@@ -946,9 +929,7 @@ class GetTemplateHelperDocsIntent(intent.IntentHandler):
                 speech_parts.append(f"\n{category.capitalize()}:")
                 for h in helpers:
                     desc_first_line = h["description"].split("\n")[0]
-                    speech_parts.append(
-                        f"- `{h['name']}{h['signature']}`: {desc_first_line}"
-                    )
+                    speech_parts.append(f"- `{h['name']}{h['signature']}`: {desc_first_line}")
 
         if len(speech_parts) == 1:
             speech_parts.append("No matching template helpers found.")
@@ -991,17 +972,12 @@ class RenderTemplateIntent(intent.IntentHandler):
         response = intent_obj.create_response()
 
         from . import async_evaluate_template
+
         try:
-            result = await async_evaluate_template(
-                hass, template_str, variables
-            )
-            response.async_set_speech(
-                f"Template rendered successfully:\n{result}"
-            )
+            result = await async_evaluate_template(hass, template_str, variables)
+            response.async_set_speech(f"Template rendered successfully:\n{result}")
         except Exception as err:
-            response.async_set_speech(
-                f"Failed to render template: {err}"
-            )
+            response.async_set_speech(f"Failed to render template: {err}")
 
         return response
 
@@ -1041,6 +1017,7 @@ class GetCommonIconsIntent(intent.IntentHandler):
         response = intent_obj.create_response()
 
         from . import async_get_common_icons
+
         result = async_get_common_icons(intent_obj.hass, search_term, icon_to_validate)
 
         speech_parts = []
@@ -1058,9 +1035,7 @@ class GetCommonIconsIntent(intent.IntentHandler):
             else:
                 speech_parts.append("\nMatching icons:")
                 for item in icons:
-                    speech_parts.append(
-                        f"- `{item['icon']}`: {item['description']}"
-                    )
+                    speech_parts.append(f"- `{item['icon']}`: {item['description']}")
 
         response.async_set_speech("\n".join(speech_parts))
         return response

@@ -94,3 +94,9 @@ This structured design prevents hard exceptions from crashing the LLM tool invoc
     disable the automation (setting `initial_state: false` in YAML and turning it off) or
     modify the script (prepending a notification warning and `stop` action) rather than removing
     them from the YAML config. Ensure any future changes to deletion logic respect this flow.
+*   **Unit Testing Requirements**: Whenever adding a new feature or modifying component logic,
+    always add corresponding unit tests to `tests/test_integration.py` to verify correctness and
+    prevent future regressions. The pre-commit framework (`.pre-commit-config.yaml`) is configured
+    to run tests on every commit; ensure tests are updated and pass before finalizing changes.
+
+

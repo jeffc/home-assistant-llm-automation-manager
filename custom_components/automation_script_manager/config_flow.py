@@ -37,9 +37,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # If user confirmed installation, create config entry with empty data.
         # Options flow handles all actual parameters.
         if user_input is not None:
-            return self.async_create_entry(
-                title="Automation & Script Manager", data={}
-            )
+            return self.async_create_entry(title="Automation & Script Manager", data={})
 
         # Show the confirmation form to the user.
         return self.async_show_form(step_id="user")
@@ -63,9 +61,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     deletion policies, LLM exposure settings, and regex permission rules.
     """
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> Any:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> Any:
         """Manage the initial options page.
 
         Builds the options configuration schema, parses user inputs, and saves
@@ -76,14 +72,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             self._options_data = dict(self.config_entry.options)
 
         import homeassistant.helpers.category_registry as cr
+
         category_reg = cr.async_get(self.hass)
 
-        automation_categories = list(
-            category_reg.async_list_categories(scope="automation")
-        )
-        script_categories = list(
-            category_reg.async_list_categories(scope="script")
-        )
+        automation_categories = list(category_reg.async_list_categories(scope="automation"))
+        script_categories = list(category_reg.async_list_categories(scope="script"))
 
         has_categories = len(automation_categories) > 0 or len(script_categories) > 0
 
@@ -112,9 +105,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Tag (label) auto-assigned to all created entities.
                 vol.Optional(
                     "tag",
-                    default=self._options_data.get(
-                        "tag", "CREATED_WITH_AUTOMATION"
-                    ),
+                    default=self._options_data.get("tag", "CREATED_WITH_AUTOMATION"),
                 ): vol.All(cv.string, vol.Match(r"^[a-zA-Z0-9_\-\s]*$")),
                 # Tag (label) auto-assigned to temporary/one-shot entities.
                 vol.Optional(
@@ -134,9 +125,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Settings to control if the LLM should be prompted to be explicit.
                 vol.Optional(
                     "prompt_one_time_vs_recurring",
-                    default=self._options_data.get(
-                        "prompt_one_time_vs_recurring", True
-                    ),
+                    default=self._options_data.get("prompt_one_time_vs_recurring", True),
                 ): bool,
                 # Enable debug mode to log and return LLM reasoning.
                 vol.Optional(
@@ -146,9 +135,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Categorization modes
                 vol.Optional(
                     "categorize_mode",
-                    default=self._options_data.get(
-                        "categorize_mode", "leave_uncategorized"
-                    ),
+                    default=self._options_data.get("categorize_mode", "leave_uncategorized"),
                 ): vol.In(categorize_modes),
                 # Force delete validation (only allow deleting tagged entities).
                 vol.Optional(
@@ -158,16 +145,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Intercept deletions, disabling entities instead of removing them.
                 vol.Optional(
                     "disable_instead_of_delete",
-                    default=self._options_data.get(
-                        "disable_instead_of_delete", False
-                    ),
+                    default=self._options_data.get("disable_instead_of_delete", False),
                 ): bool,
                 # Tag applied to entities that were disabled instead of deleted.
                 vol.Optional(
                     "would_be_deleted_tag",
-                    default=self._options_data.get(
-                        "would_be_deleted_tag", "would-be-deleted"
-                    ),
+                    default=self._options_data.get("would_be_deleted_tag", "would-be-deleted"),
                 ): vol.All(cv.string, vol.Match(r"^[a-zA-Z0-9_\-\s]*$")),
             }
         )
@@ -178,15 +161,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=schema,
         )
 
-    async def async_step_category_specified(
-        self, user_input: dict[str, Any] | None = None
-    ) -> Any:
+    async def async_step_category_specified(self, user_input: dict[str, Any] | None = None) -> Any:
         """Handle specified category configuration step."""
         if user_input is not None:
             self._options_data.update(user_input)
             return await self.async_step_security()
 
         import homeassistant.helpers.category_registry as cr
+
         category_reg = cr.async_get(self.hass)
 
         automation_categories = {
@@ -194,8 +176,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             for cat in category_reg.async_list_categories(scope="automation")
         }
         script_categories = {
-            cat.category_id: cat.name
-            for cat in category_reg.async_list_categories(scope="script")
+            cat.category_id: cat.name for cat in category_reg.async_list_categories(scope="script")
         }
 
         # Add a default/no-category option
@@ -209,15 +190,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             {
                 vol.Optional(
                     "specified_automation_category",
-                    default=self._options_data.get(
-                        "specified_automation_category", ""
-                    ),
+                    default=self._options_data.get("specified_automation_category", ""),
                 ): vol.In(automation_cat_options),
                 vol.Optional(
                     "specified_script_category",
-                    default=self._options_data.get(
-                        "specified_script_category", ""
-                    ),
+                    default=self._options_data.get("specified_script_category", ""),
                 ): vol.In(script_cat_options),
             }
         )
@@ -227,9 +204,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=schema,
         )
 
-    async def async_step_category_auto(
-        self, user_input: dict[str, Any] | None = None
-    ) -> Any:
+    async def async_step_category_auto(self, user_input: dict[str, Any] | None = None) -> Any:
         """Handle auto-categorize configuration step."""
         if user_input is not None:
             self._options_data.update(user_input)
@@ -239,9 +214,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             {
                 vol.Optional(
                     "always_assign_category",
-                    default=self._options_data.get(
-                        "always_assign_category", False
-                    ),
+                    default=self._options_data.get("always_assign_category", False),
                 ): bool,
             }
         )
@@ -251,9 +224,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=schema,
         )
 
-    async def async_step_security(
-        self, user_input: dict[str, Any] | None = None
-    ) -> Any:
+    async def async_step_security(self, user_input: dict[str, Any] | None = None) -> Any:
         """Handle security configuration step."""
         if user_input is not None:
             self._options_data.update(user_input)
@@ -265,18 +236,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             {
                 vol.Optional(
                     "disallow_regexes",
-                    default=self._options_data.get(
-                        "disallow_regexes", "homeassistant\\..*"
-                    ),
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
+                    default=self._options_data.get("disallow_regexes", "homeassistant\\..*"),
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
                 vol.Optional(
                     "allow_regexes",
                     default=self._options_data.get("allow_regexes", ".*"),
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             }
         )
 

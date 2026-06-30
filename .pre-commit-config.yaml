@@ -1,0 +1,14 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+        args: [--line-length=100]
+  - repo: local
+    hooks:
+      - id: pytest
+        name: Run pytest unit tests
+        entry: env PYTHONPATH=. ./venv/bin/pytest tests/
+        language: system
+        pass_filenames: false
+        always_run: true
