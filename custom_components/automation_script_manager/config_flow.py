@@ -87,17 +87,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             categorize_modes["put_in_specified"] = "Put in specified category"
             categorize_modes["auto_categorize"] = "Auto-categorize"
 
+        errors = {}
         # Save config changes and transition to category steps or security step.
         if user_input is not None:
-            self._options_data.update(user_input)
+            import re
 
-            mode = self._options_data.get("categorize_mode", "leave_uncategorized")
-            if mode == "put_in_specified" and has_categories:
-                return await self.async_step_category_specified()
-            if mode == "auto_categorize" and has_categories:
-                return await self.async_step_category_auto()
+            tag_pattern = re.compile(r"^[a-zA-Z0-9_\-\s]*$")
+            for field in ("tag", "one_shot_tag", "would_be_deleted_tag"):
+                val = user_input.get(field, "")
+                if val is not None and not tag_pattern.match(val):
+                    errors[field] = "invalid_tag_format"
 
-            return await self.async_step_security()
+            if not errors:
+                self._options_data.update(user_input)
+
+                mode = self._options_data.get("categorize_mode", "leave_uncategorized")
+                if mode == "put_in_specified" and has_categories:
+                    return await self.async_step_category_specified()
+                if mode == "auto_categorize" and has_categories:
+                    return await self.async_step_category_auto()
+
+                return await self.async_step_security()
 
         # Build schema for all configurable options with defaults.
         schema = vol.Schema(
@@ -106,12 +116,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     "tag",
                     default=self._options_data.get("tag", "CREATED_WITH_AUTOMATION"),
-                ): vol.All(cv.string, vol.Match(r"^[a-zA-Z0-9_\-\s]*$")),
+                ): str,
                 # Tag (label) auto-assigned to temporary/one-shot entities.
                 vol.Optional(
                     "one_shot_tag",
                     default=self._options_data.get("one_shot_tag", "one-shot"),
-                ): vol.All(cv.string, vol.Match(r"^[a-zA-Z0-9_\-\s]*$")),
+                ): str,
                 # Expose creation/deletion actions as intent tools to Assist/LLM.
                 vol.Optional(
                     "expose_llm_tools",
@@ -151,7 +161,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     "would_be_deleted_tag",
                     default=self._options_data.get("would_be_deleted_tag", "would-be-deleted"),
-                ): vol.All(cv.string, vol.Match(r"^[a-zA-Z0-9_\-\s]*$")),
+                ): str,
             }
         )
 
@@ -159,6 +169,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=schema,
+            errors=errors,
         )
 
     async def async_step_category_specified(self, user_input: dict[str, Any] | None = None) -> Any:

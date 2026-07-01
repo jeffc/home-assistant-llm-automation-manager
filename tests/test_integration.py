@@ -1,6 +1,6 @@
 """Unit tests for Automation & Script Manager custom integration."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 import voluptuous as vol
 
@@ -171,3 +171,52 @@ def test_intent_dynamic_slots_and_guidelines():
     # Guidelines should now include icon assignment instructions
     assert "ICON ASSIGNMENT GUIDELINE" in auto_intent.description
     assert "ICON ASSIGNMENT GUIDELINE" in script_intent.description
+
+
+@pytest.mark.asyncio
+async def test_options_flow_manual_tag_validation():
+    """Test tag validation in OptionsFlowHandler."""
+    from custom_components.automation_script_manager.config_flow import OptionsFlowHandler
+
+    mock_entry = MagicMock()
+    mock_entry.options = {
+        "tag": "initial-tag",
+        "one_shot_tag": "initial-one-shot",
+        "would_be_deleted_tag": "initial-would-be-deleted",
+    }
+
+    with patch.object(
+        OptionsFlowHandler, "config_entry", new_callable=PropertyMock
+    ) as mock_config_entry:
+        mock_config_entry.return_value = mock_entry
+        handler = OptionsFlowHandler()
+        handler.hass = MagicMock()
+
+        # Mock category registry to return no categories
+        with patch("homeassistant.helpers.category_registry.async_get") as mock_cat_get:
+            mock_cat_reg = MagicMock()
+            mock_cat_reg.async_list_categories.return_value = []
+            mock_cat_get.return_value = mock_cat_reg
+
+            # Test valid input (passes validation, returns next step or transitions)
+            valid_input = {
+                "tag": "my_valid_tag 123",
+                "one_shot_tag": "valid-one",
+                "would_be_deleted_tag": "valid-would-be-deleted",
+            }
+            with patch.object(handler, "async_step_security") as mock_step_sec:
+                await handler.async_step_init(valid_input)
+                mock_step_sec.assert_called_once()
+
+            # Test invalid input (fails validation, shows form with errors)
+            invalid_input = {
+                "tag": "invalid,tag",
+                "one_shot_tag": "invalid;tag",
+                "would_be_deleted_tag": "invalid/tag",
+            }
+            res = await handler.async_step_init(invalid_input)
+            assert res["errors"] == {
+                "tag": "invalid_tag_format",
+                "one_shot_tag": "invalid_tag_format",
+                "would_be_deleted_tag": "invalid_tag_format",
+            }

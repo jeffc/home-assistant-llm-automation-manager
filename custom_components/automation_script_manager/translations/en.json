@@ -11,6 +11,9 @@
     }
   },
   "options": {
+    "error": {
+      "invalid_tag_format": "Only alphanumeric, spaces, hyphens, and underscores allowed."
+    },
     "step": {
       "init": {
         "title": "Configure Options",
