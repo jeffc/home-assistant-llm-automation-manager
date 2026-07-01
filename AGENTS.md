@@ -94,6 +94,11 @@ This structured design prevents hard exceptions from crashing the LLM tool invoc
     disable the automation (setting `initial_state: false` in YAML and turning it off) or
     modify the script (prepending a notification warning and `stop` action) rather than removing
     them from the YAML config. Ensure any future changes to deletion logic respect this flow.
+*   **Self-Deletion Safety**: When an entity deletes/disables itself (e.g., via `on_completion`),
+    running `turn_off` or `reload` under the same task would raise a `CancelledError` and abort
+    the deletion mid-flight. To prevent this, the YAML modification is written first, and all
+    consequent event loop actions (reload, turn off, tag updates, registry removal) are delegated
+    to a detached background task (`hass.async_create_background_task`).
 *   **Unit Testing Requirements**: Whenever adding a new feature or modifying component logic,
     always add corresponding unit tests to `tests/test_integration.py` to verify correctness and
     prevent future regressions. The pre-commit framework (`.pre-commit-config.yaml`) is configured

@@ -220,3 +220,69 @@ async def test_options_flow_manual_tag_validation():
                 "one_shot_tag": "invalid_tag_format",
                 "would_be_deleted_tag": "invalid_tag_format",
             }
+
+
+@pytest.mark.asyncio
+async def test_async_delete_delegation_to_background():
+    """Test that delete services schedule reload/cleanup in a background task."""
+    from custom_components.automation_script_manager import async_setup_entry
+    from homeassistant.core import ServiceCall
+
+    hass = MagicMock()
+
+    async def mock_async_add_executor_job(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    hass.async_add_executor_job = mock_async_add_executor_job
+
+    mock_bg_task = MagicMock()
+
+    def mock_create_background_task(target, name, eager_start=True):
+        target.close()
+        mock_bg_task(target, name, eager_start=eager_start)
+        return MagicMock()
+
+    hass.async_create_background_task = mock_create_background_task
+
+    entry = MagicMock()
+    entry.options = {"disable_instead_of_delete": False}
+    hass.config_entries.async_entries.return_value = [entry]
+
+    registered_services = {}
+
+    def mock_register(domain, service, func, schema=None, supports_response=None):
+        if domain == "automation_script_manager":
+            registered_services[service] = func
+
+    hass.services.async_register = mock_register
+
+    # Run setup
+    await async_setup_entry(hass, entry)
+
+    # Verify both delete services are registered
+    assert "delete_automation" in registered_services
+    assert "delete_script" in registered_services
+
+    mock_yaml = [{"id": "test_auto"}]
+    ent_reg = MagicMock()
+    ent_reg.async_get_entity_id.return_value = "automation.test_auto"
+
+    with (
+        patch("custom_components.automation_script_manager._read_yaml", return_value=mock_yaml),
+        patch("custom_components.automation_script_manager._write_yaml") as mock_write,
+        patch("homeassistant.helpers.entity_registry.async_get", return_value=ent_reg),
+        patch("custom_components.automation_script_manager._verify_deletion_restriction"),
+        patch("custom_components.automation_script_manager.AUTOMATION_CONFIG_PATH", "fake_path"),
+    ):
+        # Call delete_automation service
+        call = ServiceCall(
+            hass, "automation_script_manager", "delete_automation", {"id": "test_auto"}
+        )
+        res = await registered_services["delete_automation"](call)
+
+        # Verify it writes to YAML immediately and returns success
+        mock_write.assert_called_once()
+        assert res == {"success": True, "id": "test_auto"}
+
+        # Verify it schedules a background task on the event loop
+        mock_bg_task.assert_called_once()

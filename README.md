@@ -5,7 +5,10 @@ A custom integration for Home Assistant that allows you to programmatically crea
 ## Features
 *   **Programmatic CRUD**: Create, read, update, and delete automations and scripts via action calls without manually editing YAML files.
 *   **LLM Tool Integration**: Automatically registers custom intents (`CreateAutomation`, `DeleteAutomation`, `CreateScript`, `DeleteScript`, `GetExposedNotifyEntities`, `EnumerateActions`, `GetActionDetails`) that expose these actions as tools to LLM integrations (like Assist, Google Generative AI, or OpenAI Conversation).
-*   **Self-Destructing Sequences**: Create "run-once" or temporary automations/scripts by specifying `on_completion: delete_self` or `disable_self`.
+*   **Self-Destructing Sequences**: Create "run-once" or temporary automations/scripts by
+    specifying `on_completion: delete_self` or `disable_self`. Self-deletion/disabling calls
+    are executed asynchronously in a detached background task to prevent self-cancellation
+    when the entity turns off or reloads.
 *   **Safety & Tagging**: Automatically assign a label/tag (e.g., `AI Generated`) to entities created via this manager, and optionally restrict deletions so only tagged entities can be deleted.
 *   **Structured Feedback**: Services support optional responses. If the YAML configuration fails validation (using Home Assistant Core's native validation engine), the action returns `{"success": false, "error": "Reason"}` to let humans or LLM agents read and correct the parameters.
 

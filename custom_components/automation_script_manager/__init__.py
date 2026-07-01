@@ -1292,6 +1292,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "would_be_deleted_tag", "would-be-deleted"
             ).strip()
 
+            # Resolve entity_id for background operations
+            ent_reg = er.async_get(hass)
+            reg_entity_id = entity_id or ent_reg.async_get_entity_id(
+                AUTOMATION_DOMAIN, AUTOMATION_DOMAIN, config_key
+            )
+
             if disable_instead_of_delete:
                 path = hass.config.path(AUTOMATION_CONFIG_PATH)
                 lock = hass.data[DOMAIN]["automation_lock"]
@@ -1315,75 +1321,62 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                     await hass.async_add_executor_job(_write_yaml, path, current)
 
-                # Reload automations
-                await hass.services.async_call(AUTOMATION_DOMAIN, SERVICE_RELOAD)
+                # Define background operations to prevent self-cancellation
+                async def _async_bg_disable() -> None:
+                    try:
+                        # Reload automations
+                        await hass.services.async_call(
+                            AUTOMATION_DOMAIN, SERVICE_RELOAD, blocking=True
+                        )
+                        if reg_entity_id:
+                            # Turn off automation
+                            await hass.services.async_call(
+                                AUTOMATION_DOMAIN,
+                                "turn_off",
+                                {"entity_id": reg_entity_id},
+                                blocking=True,
+                            )
+                            # Add override tag if configured
+                            if would_be_deleted_tag:
+                                label_reg = lr.async_get(hass)
+                                label = label_reg.async_get_label_by_name(would_be_deleted_tag)
+                                if label is None:
+                                    try:
+                                        label = label_reg.async_create(would_be_deleted_tag)
+                                    except ValueError:
+                                        label = next(
+                                            (
+                                                l
+                                                for l in label_reg.labels.values()
+                                                if l.name.lower() == would_be_deleted_tag.lower()
+                                            ),
+                                            None,
+                                        )
+                                if label:
+                                    label_id = label.label_id
+                                    reg_entry = ent_reg.async_get(reg_entity_id)
+                                    if reg_entry:
+                                        new_labels = reg_entry.labels | {label_id}
+                                        ent_reg.async_update_entity(
+                                            reg_entity_id, labels=new_labels
+                                        )
+                        _LOGGER.info(
+                            "Delete override background task: Disabled automation '%s'",
+                            config_key,
+                        )
+                    except Exception as err:
+                        _LOGGER.error(
+                            "Background task failed for disabling automation '%s': %s",
+                            config_key,
+                            err,
+                        )
 
-                # Resolve entity_id to turn it off and apply the tag
-                ent_reg = er.async_get(hass)
-                reg_entity_id = entity_id or ent_reg.async_get_entity_id(
-                    AUTOMATION_DOMAIN, AUTOMATION_DOMAIN, config_key
-                )
-
-                if reg_entity_id:
-                    # Turn off automation
-                    await hass.services.async_call(
-                        AUTOMATION_DOMAIN,
-                        "turn_off",
-                        {"entity_id": reg_entity_id},
-                    )
-
-                    # Add override tag if configured
-                    if would_be_deleted_tag:
-                        label_reg = lr.async_get(hass)
-                        label = label_reg.async_get_label_by_name(would_be_deleted_tag)
-                        if label is None:
-                            try:
-                                label = label_reg.async_create(would_be_deleted_tag)
-                            except ValueError:
-                                label = next(
-                                    (
-                                        l
-                                        for l in label_reg.labels.values()
-                                        if l.name.lower() == would_be_deleted_tag.lower()
-                                    ),
-                                    None,
-                                )
-                        if label:
-                            label_id = label.label_id
-                            reg_entry = ent_reg.async_get(reg_entity_id)
-                            if reg_entry:
-                                new_labels = reg_entry.labels | {label_id}
-                                ent_reg.async_update_entity(reg_entity_id, labels=new_labels)
-
-                _LOGGER.info(
-                    "Delete override: Disabled automation '%s' instead of deleting",
-                    config_key,
+                hass.async_create_background_task(
+                    _async_bg_disable(), f"disable_automation_{config_key}"
                 )
                 return {"success": True, "id": config_key}
 
-            # Turn off automation before deleting it from YAML/registry
-            ent_reg = er.async_get(hass)
-            reg_entity_id = entity_id or ent_reg.async_get_entity_id(
-                AUTOMATION_DOMAIN, AUTOMATION_DOMAIN, config_key
-            )
-            if reg_entity_id:
-                try:
-                    await hass.services.async_call(
-                        AUTOMATION_DOMAIN,
-                        "turn_off",
-                        {"entity_id": reg_entity_id},
-                    )
-                    _LOGGER.info(
-                        "Turned off automation '%s' before deletion",
-                        reg_entity_id,
-                    )
-                except Exception as err:
-                    _LOGGER.warning(
-                        "Failed to turn off automation '%s' before deletion: %s",
-                        reg_entity_id,
-                        err,
-                    )
-
+            # If disable_instead_of_delete is False:
             path = hass.config.path(AUTOMATION_CONFIG_PATH)
             lock = hass.data[DOMAIN]["automation_lock"]
 
@@ -1400,24 +1393,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         index_to_delete = index
                         break
 
-            if index_to_delete is None:
-                raise ValueError(f"Automation with ID '{config_key}' not found")
+                if index_to_delete is None:
+                    raise ValueError(f"Automation with ID '{config_key}' not found")
 
-            async with lock:
                 current.pop(index_to_delete)
                 await hass.async_add_executor_job(_write_yaml, path, current)
 
-            # Remove from entity registry
-            ent_reg = er.async_get(hass)
-            reg_entity_id = ent_reg.async_get_entity_id(
-                AUTOMATION_DOMAIN, AUTOMATION_DOMAIN, config_key
-            )
-            if reg_entity_id is not None:
-                ent_reg.async_remove(reg_entity_id)
+            # Define background operations to prevent self-cancellation
+            async def _async_bg_delete() -> None:
+                try:
+                    if reg_entity_id:
+                        try:
+                            await hass.services.async_call(
+                                AUTOMATION_DOMAIN,
+                                "turn_off",
+                                {"entity_id": reg_entity_id},
+                                blocking=True,
+                            )
+                        except Exception as err:
+                            _LOGGER.warning(
+                                "Failed to turn off automation '%s' in background: %s",
+                                reg_entity_id,
+                                err,
+                            )
 
-            # Reload automations to apply deletion
-            await hass.services.async_call(AUTOMATION_DOMAIN, SERVICE_RELOAD)
-            _LOGGER.info("Successfully deleted automation '%s'", config_key)
+                    # Reload automations
+                    await hass.services.async_call(AUTOMATION_DOMAIN, SERVICE_RELOAD, blocking=True)
+
+                    # Remove from entity registry
+                    if reg_entity_id:
+                        ent_reg.async_remove(reg_entity_id)
+
+                    _LOGGER.info("Successfully deleted automation '%s' in background", config_key)
+                except Exception as err:
+                    _LOGGER.error(
+                        "Background task failed for deleting automation '%s': %s",
+                        config_key,
+                        err,
+                    )
+
+            hass.async_create_background_task(_async_bg_delete(), f"delete_automation_{config_key}")
             return {"success": True, "id": config_key}
 
         except Exception as err:
@@ -1588,6 +1603,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "would_be_deleted_tag", "would-be-deleted"
             ).strip()
 
+            # Resolve entity_id for background operations
+            ent_reg = er.async_get(hass)
+            reg_entity_id = entity_id or ent_reg.async_get_entity_id(
+                SCRIPT_DOMAIN, SCRIPT_DOMAIN, config_key
+            )
+
             if disable_instead_of_delete:
                 path = hass.config.path(SCRIPT_CONFIG_PATH)
                 lock = hass.data[DOMAIN]["script_lock"]
@@ -1635,45 +1656,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                     await hass.async_add_executor_job(_write_yaml, path, current)
 
-                # Reload scripts
-                await hass.services.async_call(SCRIPT_DOMAIN, SERVICE_RELOAD)
+                # Define background operations to prevent self-cancellation
+                async def _async_bg_disable() -> None:
+                    try:
+                        # Reload scripts
+                        await hass.services.async_call(SCRIPT_DOMAIN, SERVICE_RELOAD, blocking=True)
+                        if reg_entity_id and would_be_deleted_tag:
+                            label_reg = lr.async_get(hass)
+                            label = label_reg.async_get_label_by_name(would_be_deleted_tag)
+                            if label is None:
+                                try:
+                                    label = label_reg.async_create(would_be_deleted_tag)
+                                except ValueError:
+                                    label = next(
+                                        (
+                                            l
+                                            for l in label_reg.labels.values()
+                                            if l.name.lower() == would_be_deleted_tag.lower()
+                                        ),
+                                        None,
+                                    )
+                            if label:
+                                label_id = label.label_id
+                                reg_entry = ent_reg.async_get(reg_entity_id)
+                                if reg_entry:
+                                    new_labels = reg_entry.labels | {label_id}
+                                    ent_reg.async_update_entity(reg_entity_id, labels=new_labels)
+                        _LOGGER.info(
+                            "Delete override background task: Disabled script '%s'",
+                            config_key,
+                        )
+                    except Exception as err:
+                        _LOGGER.error(
+                            "Background task failed for disabling script '%s': %s",
+                            config_key,
+                            err,
+                        )
 
-                # Resolve entity_id to apply the tag
-                ent_reg = er.async_get(hass)
-                reg_entity_id = entity_id or ent_reg.async_get_entity_id(
-                    SCRIPT_DOMAIN, SCRIPT_DOMAIN, config_key
-                )
-
-                if reg_entity_id:
-                    # Add override tag if configured
-                    if would_be_deleted_tag:
-                        label_reg = lr.async_get(hass)
-                        label = label_reg.async_get_label_by_name(would_be_deleted_tag)
-                        if label is None:
-                            try:
-                                label = label_reg.async_create(would_be_deleted_tag)
-                            except ValueError:
-                                label = next(
-                                    (
-                                        l
-                                        for l in label_reg.labels.values()
-                                        if l.name.lower() == would_be_deleted_tag.lower()
-                                    ),
-                                    None,
-                                )
-                        if label:
-                            label_id = label.label_id
-                            reg_entry = ent_reg.async_get(reg_entity_id)
-                            if reg_entry:
-                                new_labels = reg_entry.labels | {label_id}
-                                ent_reg.async_update_entity(reg_entity_id, labels=new_labels)
-
-                _LOGGER.info(
-                    "Delete override: Disabled script '%s' instead of deleting",
-                    config_key,
+                hass.async_create_background_task(
+                    _async_bg_disable(), f"disable_script_{config_key}"
                 )
                 return {"success": True, "id": config_key}
 
+            # If disable_instead_of_delete is False:
             path = hass.config.path(SCRIPT_CONFIG_PATH)
             lock = hass.data[DOMAIN]["script_lock"]
 
@@ -1690,15 +1715,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 current.pop(config_key)
                 await hass.async_add_executor_job(_write_yaml, path, current)
 
-            # Remove from entity registry
-            ent_reg = er.async_get(hass)
-            reg_entity_id = ent_reg.async_get_entity_id(SCRIPT_DOMAIN, SCRIPT_DOMAIN, config_key)
-            if reg_entity_id is not None:
-                ent_reg.async_remove(reg_entity_id)
+            # Define background operations to prevent self-cancellation
+            async def _async_bg_delete() -> None:
+                try:
+                    # Remove from entity registry
+                    if reg_entity_id:
+                        ent_reg.async_remove(reg_entity_id)
 
-            # Reload scripts to apply deletion
-            await hass.services.async_call(SCRIPT_DOMAIN, SERVICE_RELOAD)
-            _LOGGER.info("Successfully deleted script '%s'", config_key)
+                    # Reload scripts to apply deletion
+                    await hass.services.async_call(SCRIPT_DOMAIN, SERVICE_RELOAD, blocking=True)
+                    _LOGGER.info("Successfully deleted script '%s' in background", config_key)
+                except Exception as err:
+                    _LOGGER.error(
+                        "Background task failed for deleting script '%s': %s",
+                        config_key,
+                        err,
+                    )
+
+            hass.async_create_background_task(_async_bg_delete(), f"delete_script_{config_key}")
             return {"success": True, "id": config_key}
 
         except Exception as err:
